@@ -77,7 +77,7 @@ impl FileSystemProvider for SftpFileSystem {
                 }
 
                 let is_dir = stat.is_dir();
-                let is_symlink = stat.is_symlink();
+                let is_symlink = stat.perm.map(|p| (p & 0o170000) == 0o120000).unwrap_or(false);
                 let is_hidden = file_name.starts_with('.');
                 let size = if is_dir { 0 } else { stat.size.unwrap_or(0) };
                 let modified = stat.mtime.unwrap_or(0);
@@ -229,7 +229,7 @@ impl FileSystemProvider for SftpFileSystem {
                             is_dir,
                             modified: stat.mtime.unwrap_or(0),
                             permissions: if is_dir { "drwxr-xr-x".to_string() } else { "-rw-r--r--".to_string() },
-                            is_symlink: stat.is_symlink(),
+                            is_symlink: stat.perm.map(|p| (p & 0o170000) == 0o120000).unwrap_or(false),
                             is_hidden: file_name.starts_with('.'),
                         });
                     }

@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="sv" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RL Commander v1.1 - Live Web Preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col overflow-hidden select-none font-sans">
+
+  <!-- Top Application Bar -->
+  <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shadow-md">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 via-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+        <i class="fa-solid fa-microchip text-white text-base"></i>
+      </div>
+      <div>
+        <h1 class="font-black text-base tracking-wider bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
+          RL COMMANDER <span class="text-xs font-mono font-normal text-slate-400">v1.1</span>
+        </h1>
+        <p class="text-[10px] font-mono text-slate-400 -mt-0.5">High Performance Dual-Pane & SFTP Engine</p>
+      </div>
+    </div>
+
+    <!-- Active Pane Status Indicator -->
+    <div class="hidden sm:flex items-center gap-3 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-mono">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="text-slate-400">Aktiv Pane:</span>
+        <span id="activePaneIndicator" class="font-bold text-blue-400 uppercase">LEFT</span>
+      </div>
+      <div class="h-3 w-px bg-slate-800"></div>
+      <button onclick="toggleActivePane()" class="text-slate-400 hover:text-white flex items-center gap-1 transition-colors hover:bg-slate-900 px-1.5 py-0.5 rounded">
+        <i class="fa-solid fa-right-left text-indigo-400"></i>
+        <span>Växla (Tab)</span>
+      </button>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button onclick="openSearchModal()" class="bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-800/80 text-indigo-300 px-3 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-sm">
+        <i class="fa-solid fa-magnifying-glass text-indigo-400"></i>
+        <span>Sök (Alt+F7)</span>
+      </button>
+      <button onclick="openSftpModal()" class="bg-purple-950/60 hover:bg-purple-900 border border-purple-800/80 text-purple-300 px-3 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-sm">
+        <i class="fa-solid fa-server text-purple-400"></i>
+        <span>SFTP Manager</span>
+      </button>
+      <button onclick="refreshPanes()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-2.5 py-1.5 rounded-md text-xs font-mono flex items-center gap-1 transition-all" title="Uppdatera båda paneler">
+        <i class="fa-solid fa-rotate text-slate-400"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Notification Banner -->
+  <div id="notificationBanner" class="hidden bg-blue-950/90 border-b border-blue-800/80 px-4 py-1.5 flex items-center justify-between text-xs font-mono text-blue-200">
+    <div class="flex items-center gap-2">
+      <i id="notifIcon" class="fa-solid fa-spinner animate-spin text-blue-400"></i>
+      <span id="notifText">Kopierar filer...</span>
+    </div>
+  </div>
+
+  <!-- Main Dual-Pane Viewport -->
+  <main class="flex-1 flex p-2 gap-2 overflow-hidden bg-slate-950">
+    
+    <!-- LEFT PANE -->
+    <div id="paneLeft" onclick="setActivePane('left')" class="flex-1 flex flex-col h-full bg-slate-900 border border-blue-500 ring-1 ring-blue-500/50 rounded-lg overflow-hidden shadow-xl">
+      <div class="bg-slate-950 px-3 py-2 border-b border-slate-800 flex flex-col gap-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 flex-1 min-w-0">
+            <i class="fa-solid fa-hard-drive text-blue-400"></i>
+            <span class="text-xs font-mono font-semibold text-slate-200 truncate flex-1 bg-slate-900 px-2 py-1 rounded border border-slate-800" id="leftPath">
+              /home/hans/RL-Commander
+            </span>
+          </div>
+          <button onclick="openSearchModal()" class="p-1.5 rounded bg-indigo-950/60 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 text-xs flex items-center gap-1 font-semibold">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </button>
+        </div>
+        <div class="flex items-center justify-between gap-2 pt-0.5">
+          <div class="flex items-center gap-1 overflow-x-auto text-[11px] font-mono text-slate-400">
+            <button onclick="navigate('left', '/')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800">Root (/)</button>
+            <button onclick="navigate('left', '/home/hans')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800">Hem (~)</button>
+            <button onclick="navigate('left', '/home/hans/RL-Commander')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800">Projekt</button>
+            <button onclick="navigate('left', '/tmp')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800">/tmp</button>
+          </div>
+          <input type="text" id="leftFilter" oninput="applyFilter('left')" placeholder="Filter..." class="w-36 bg-slate-900 border border-slate-700 text-slate-200 text-[11px] font-mono px-2 py-0.5 rounded outline-none focus:border-blue-500">
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto bg-slate-900/90 font-mono text-xs">
+        <table class="w-full text-left border-collapse">
+          <thead class="sticky top-0 bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 text-xs">
+            <tr>
+              <th class="w-8 px-2 py-1.5 text-center">✓</th>
+              <th class="px-3 py-1.5">Namn</th>
+              <th class="w-24 px-3 py-1.5 text-right">Storlek</th>
+              <th class="w-36 px-3 py-1.5 text-right">Ändrad</th>
+              <th class="w-28 px-3 py-1.5 text-center hidden md:table-cell">Rättigheter</th>
+            </tr>
+          </thead>
+          <tbody id="leftTableBody" class="divide-y divide-slate-800/50"></tbody>
+        </table>
+      </div>
+
+      <div class="bg-slate-950 px-3 py-1.5 border-t border-slate-800 text-xs font-mono text-slate-400 flex items-center justify-between">
+        <span id="leftStatus">0 markerade</span>
+        <span id="leftTotalSize">12.4 MB totalt</span>
+      </div>
+    </div>
+
+    <!-- SPLITTER -->
+    <div class="w-1 bg-slate-800 hover:bg-blue-600 rounded cursor-col-resize transition-colors"></div>
+
+    <!-- RIGHT PANE -->
+    <div id="paneRight" onclick="setActivePane('right')" class="flex-1 flex flex-col h-full bg-slate-900 border border-slate-800 opacity-90 rounded-lg overflow-hidden shadow-xl">
+      <div class="bg-slate-950 px-3 py-2 border-b border-slate-800 flex flex-col gap-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 flex-1 min-w-0">
+            <i class="fa-solid fa-hard-drive text-blue-400"></i>
+            <span class="text-xs font-mono font-semibold text-slate-200 truncate flex-1 bg-slate-900 px-2 py-1 rounded border border-slate-800" id="rightPath">
+              /home/hans/Dokument
+            </span>
+          </div>
+          <button onclick="openSearchModal()" class="p-1.5 rounded bg-indigo-950/60 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 text-xs flex items-center gap-1 font-semibold">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </button>
+        </div>
+        <div class="flex items-center justify-between gap-2 pt-0.5">
+          <div class="flex items-center gap-1 overflow-x-auto text-[11px] font-mono text-slate-400">
+            <button onclick="navigate('right', '/')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800">Root (/)</button>
+            <button onclick="navigate('right', '/home/hans')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800">Hem (~)</button>
+            <button onclick="navigate('right', '/home/hans/Dokument')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800">Dokument</button>
+            <button onclick="navigate('right', '/etc')" class="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800">/etc</button>
+          </div>
+          <input type="text" id="rightFilter" oninput="applyFilter('right')" placeholder="Filter..." class="w-36 bg-slate-900 border border-slate-700 text-slate-200 text-[11px] font-mono px-2 py-0.5 rounded outline-none focus:border-blue-500">
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto bg-slate-900/90 font-mono text-xs">
+        <table class="w-full text-left border-collapse">
+          <thead class="sticky top-0 bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 text-xs">
+            <tr>
+              <th class="w-8 px-2 py-1.5 text-center">✓</th>
+              <th class="px-3 py-1.5">Namn</th>
+              <th class="w-24 px-3 py-1.5 text-right">Storlek</th>
+              <th class="w-36 px-3 py-1.5 text-right">Ändrad</th>
+              <th class="w-28 px-3 py-1.5 text-center hidden md:table-cell">Rättigheter</th>
+            </tr>
+          </thead>
+          <tbody id="rightTableBody" class="divide-y divide-slate-800/50"></tbody>
+        </table>
+      </div>
+
+      <div class="bg-slate-950 px-3 py-1.5 border-t border-slate-800 text-xs font-mono text-slate-400 flex items-center justify-between">
+        <span id="rightStatus">0 markerade</span>
+        <span id="rightTotalSize">4.8 MB totalt</span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Function Key Toolbar -->
+  <div class="bg-slate-950 p-1.5 border-t border-slate-800 grid grid-cols-6 gap-1 select-none font-mono">
+    <button onclick="triggerF3()" class="bg-slate-900 border border-slate-800 text-slate-200 py-1.5 px-2 rounded flex items-center justify-center gap-1.5 hover:bg-sky-600 border-sky-700/50 hover:text-white active:scale-95 text-xs font-semibold">
+      <span class="bg-slate-800 text-blue-400 px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-700">F3</span>
+      <span>Visa</span>
+    </button>
+    <button onclick="triggerF4()" class="bg-slate-900 border border-slate-800 text-slate-200 py-1.5 px-2 rounded flex items-center justify-center gap-1.5 hover:bg-amber-600 border-amber-700/50 hover:text-white active:scale-95 text-xs font-semibold">
+      <span class="bg-slate-800 text-blue-400 px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-700">F4</span>
+      <span>Redigera</span>
+    </button>
+    <button onclick="triggerF5()" class="bg-slate-900 border border-slate-800 text-slate-200 py-1.5 px-2 rounded flex items-center justify-center gap-1.5 hover:bg-emerald-600 border-emerald-700/50 hover:text-white active:scale-95 text-xs font-semibold">
+      <span class="bg-slate-800 text-blue-400 px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-700">F5</span>
+      <span>Kopiera</span>
+    </button>
+    <button onclick="triggerF6()" class="bg-slate-900 border border-slate-800 text-slate-200 py-1.5 px-2 rounded flex items-center justify-center gap-1.5 hover:bg-purple-600 border-purple-700/50 hover:text-white active:scale-95 text-xs font-semibold">
+      <span class="bg-slate-800 text-blue-400 px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-700">F6</span>
+      <span>Flytta</span>
+    </button>
+    <button onclick="triggerF7()" class="bg-slate-900 border border-slate-800 text-slate-200 py-1.5 px-2 rounded flex items-center justify-center gap-1.5 hover:bg-blue-600 border-blue-700/50 hover:text-white active:scale-95 text-xs font-semibold">
+      <span class="bg-slate-800 text-blue-400 px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-700">F7</span>
+      <span>Ny Mapp</span>
+    </button>
+    <button onclick="triggerF8()" class="bg-slate-900 border border-slate-800 text-slate-200 py-1.5 px-2 rounded flex items-center justify-center gap-1.5 hover:bg-rose-600 border-rose-700/50 hover:text-white active:scale-95 text-xs font-semibold">
+      <span class="bg-slate-800 text-blue-400 px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-700">F8</span>
+      <span>Radera</span>
+    </button>
+  </div>
+
+  <!-- MODALS -->
+  <!-- F3 Viewer Modal -->
+  <div id="modalViewer" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-6">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-4xl h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2 font-mono text-sm text-sky-400 font-bold truncate">
+          <i class="fa-solid fa-file-lines text-sky-400"></i>
+          <span id="viewerTitle">F3 Viewer</span>
+        </div>
+        <button onclick="closeModal('modalViewer')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+      <div id="viewerContent" class="flex-1 overflow-auto p-4 bg-slate-950 text-slate-200 font-mono text-xs leading-relaxed whitespace-pre-wrap select-text"></div>
+      <div class="bg-slate-950 px-4 py-2 flex items-center justify-between text-xs font-mono text-slate-400 border-t border-slate-800">
+        <span>Tryck ESC eller klicka stäng</span>
+        <button onclick="alert('Kopierat!')" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1 border border-slate-700">
+          <i class="fa-solid fa-copy"></i> Kopiera text
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- F4 Editor Modal -->
+  <div id="modalEditor" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-6">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2 font-mono text-sm text-amber-400 font-bold truncate">
+          <i class="fa-solid fa-pen-to-square text-amber-400"></i>
+          <span id="editorTitle">F4 Redigerare</span>
+          <span id="editorDirtyTag" class="hidden bg-amber-950/80 text-amber-300 border border-amber-800 text-[10px] px-2 py-0.5 rounded font-mono animate-pulse">[Ändrad *]</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="saveEditorFile()" class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-semibold flex items-center gap-1.5">
+            <i class="fa-solid fa-floppy-disk"></i> Spara (Ctrl+S)
+          </button>
+          <button onclick="closeModal('modalEditor')" class="text-slate-400 hover:text-white p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+      </div>
+      <div id="editorStatusBanner" class="hidden px-4 py-2 border-b bg-emerald-950/80 border-emerald-800 text-emerald-300 text-xs font-mono">
+        <i class="fa-solid fa-circle-check"></i> Filen sparades framgångsrikt!
+      </div>
+      <div class="flex-1 overflow-hidden bg-slate-950 p-4 font-mono text-xs">
+        <textarea id="editorTextarea" oninput="onEditorInput()" class="w-full h-full bg-slate-950 text-slate-100 font-mono text-xs p-3 leading-relaxed outline-none resize-none border border-slate-800 focus:border-amber-500/60 rounded-md"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alt+F7 Search Modal -->
+  <div id="modalSearch" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-6">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-3xl h-[75vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2 font-mono text-sm text-purple-400 font-bold">
+          <i class="fa-solid fa-magnifying-glass text-purple-400"></i>
+          <span>Sök Filer (Alt+F7)</span>
+        </div>
+        <button onclick="closeModal('modalSearch')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+      <div class="p-4 bg-slate-900 border-b border-slate-800 flex gap-2">
+        <input type="text" id="searchInput" placeholder="Skriv sökord (t.ex. *.rs, config, main)..." class="flex-1 bg-slate-950 border border-slate-700 focus:border-purple-500 text-slate-100 px-3 py-2 rounded font-mono text-xs outline-none">
+        <button onclick="runSearch()" class="bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-semibold px-4 py-2 rounded">Sök</button>
+      </div>
+      <div id="searchResults" class="flex-1 overflow-y-auto p-4 bg-slate-950 font-mono text-xs space-y-1"></div>
+    </div>
+  </div>
+
+  <!-- SFTP Modal -->
+  <div id="modalSftp" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-6">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg flex flex-col shadow-2xl overflow-hidden">
+      <div class="bg-slate-950 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2 font-mono text-sm text-purple-400 font-bold">
+          <i class="fa-solid fa-server"></i> SFTP Anslutning
+        </div>
+        <button onclick="closeModal('modalSftp')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+      <div class="p-4 space-y-3 font-mono text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">Värd / Server IP:</label>
+          <input type="text" value="ssh.example.com" class="w-full bg-slate-950 border border-slate-700 px-3 py-2 rounded text-slate-200">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-slate-400 mb-1">Användarnamn:</label>
+            <input type="text" value="root" class="w-full bg-slate-950 border border-slate-700 px-3 py-2 rounded text-slate-200">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Port:</label>
+            <input type="number" value="22" class="w-full bg-slate-950 border border-slate-700 px-3 py-2 rounded text-slate-200">
+          </div>
+        </div>
+        <button onclick="alert('Ansluter till SFTP...'); closeModal('modalSftp');" class="w-full mt-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold py-2 rounded">
+          Anslut SFTP
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const sampleFilesLeft = [
+      { name: "..", is_dir: true, size: 0, modified: "2026-09-20 12:00", perm: "drwxr-xr-x" },
+      { name: "src", is_dir: true, size: 0, modified: "2026-09-20 13:25", perm: "drwxr-xr-x" },
+      { name: "src-tauri", is_dir: true, size: 0, modified: "2026-09-20 13:22", perm: "drwxr-xr-x" },
+      { name: "package.json", is_dir: false, size: 776, modified: "2026-09-20 13:24", perm: "-rw-r--r--" },
+      { name: "README.md", is_dir: false, size: 3437, modified: "2026-09-20 13:26", perm: "-rw-r--r--" },
+      { name: "vite.config.ts", is_dir: false, size: 479, modified: "2026-09-20 13:21", perm: "-rw-r--r--" },
+      { name: "rlcommander_plan.md", is_dir: false, size: 3608, modified: "2026-09-20 13:26", perm: "-rw-r--r--" }
+    ];
+
+    const sampleFilesRight = [
+      { name: "..", is_dir: true, size: 0, modified: "2026-09-20 10:00", perm: "drwxr-xr-x" },
+      { name: "Rapporter", is_dir: true, size: 0, modified: "2026-09-19 18:30", perm: "drwxr-xr-x" },
+      { name: "Projektplan.pdf", is_dir: false, size: 2450000, modified: "2026-09-18 15:45", perm: "-rw-r--r--" },
+      { name: "Anteckningar.txt", is_dir: false, size: 1420, modified: "2026-09-20 11:20", perm: "-rw-r--r--" }
+    ];
+
+    let state = {
+      activePane: 'left',
+      left: { path: '/home/hans/RL-Commander', selectedIndex: 1, files: sampleFilesLeft, selected: new Set() },
+      right: { path: '/home/hans/Dokument', selectedIndex: 1, files: sampleFilesRight, selected: new Set() },
+      editorOriginal: ''
+    };
+
+    function renderPane(paneId) {
+      const p = state[paneId];
+      const tbody = document.getElementById(paneId + 'TableBody');
+      const filterVal = document.getElementById(paneId + 'Filter').value.toLowerCase();
+      tbody.innerHTML = '';
+
+      p.files.forEach((file, index) => {
+        if (filterVal && file.name !== ".." && !file.name.toLowerCase().includes(filterVal)) return;
+
+        const tr = document.createElement('tr');
+        const isSelRow = index === p.selectedIndex && state.activePane === paneId;
+        const isMarked = p.selected.has(file.name);
+
+        tr.className = `cursor-pointer transition-colors text-xs font-mono ${
+          isSelRow ? 'bg-blue-600 text-white font-bold' :
+          (isMarked ? 'bg-amber-950/30 text-amber-300' : 'hover:bg-slate-800/60 text-slate-300')
+        }`;
+
+        tr.onclick = (e) => {
+          state.activePane = paneId;
+          p.selectedIndex = index;
+          renderPanes();
+        };
+
+        tr.ondblclick = () => {
+          if (file.is_dir) {
+            alert('Navigerar till ' + file.name);
+          } else {
+            triggerF3();
+          }
+        };
+
+        const icon = file.is_dir ? '<i class="fa-solid fa-folder text-sky-400"></i>' :
+                     file.name.endsWith('.md') ? '<i class="fa-solid fa-file-code text-orange-400"></i>' :
+                     '<i class="fa-solid fa-file-lines text-slate-400"></i>';
+
+        tr.innerHTML = `
+          <td class="w-8 px-2 py-1.5 text-center">${isMarked ? '★' : (file.is_dir ? '▪' : '▫')}</td>
+          <td class="px-3 py-1.5 flex items-center gap-2 truncate">${icon} <span class="${file.is_dir ? 'text-sky-300 font-semibold' : ''}">${file.name}</span></td>
+          <td class="w-24 px-3 py-1.5 text-right">${file.is_dir ? '&lt;DIR&gt;' : file.size + ' B'}</td>
+          <td class="w-36 px-3 py-1.5 text-right text-slate-400">${file.modified}</td>
+          <td class="w-28 px-3 py-1.5 text-center text-slate-500 hidden md:table-cell">${file.perm}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById(paneId + 'Status').innerText = `${p.selected.size} markerad(e)`;
+    }
+
+    function renderPanes() {
+      document.getElementById('activePaneIndicator').innerText = state.activePane;
+      document.getElementById('paneLeft').className = `flex-1 flex flex-col h-full bg-slate-900 border rounded-lg overflow-hidden shadow-xl ${state.activePane === 'left' ? 'border-blue-500 ring-1 ring-blue-500/50' : 'border-slate-800 opacity-90'}`;
+      document.getElementById('paneRight').className = `flex-1 flex flex-col h-full bg-slate-900 border rounded-lg overflow-hidden shadow-xl ${state.activePane === 'right' ? 'border-blue-500 ring-1 ring-blue-500/50' : 'border-slate-800 opacity-90'}`;
+      renderPane('left');
+      renderPane('right');
+    }
+
+    function toggleActivePane() {
+      state.activePane = state.activePane === 'left' ? 'right' : 'left';
+      renderPanes();
+    }
+
+    function setActivePane(pane) {
+      state.activePane = pane;
+      renderPanes();
+    }
+
+    function applyFilter(pane) {
+      renderPane(pane);
+    }
+
+    function navigate(pane, path) {
+      state[pane].path = path;
+      document.getElementById(pane + 'Path').innerText = path;
+      renderPanes();
+    }
+
+    function triggerF3() {
+      const p = state[state.activePane];
+      const item = p.files[p.selectedIndex];
+      if (!item) return;
+      document.getElementById('viewerTitle').innerText = 'F3 Viewer: ' + item.name;
+      document.getElementById('viewerContent').innerText = item.name + ' innehåll:\n\n# RLCommander Dual Pane Engine\nEn modern filhanterare byggd i Tauri v2, Rust & Svelte 5.';
+      document.getElementById('modalViewer').classList.remove('hidden');
+    }
+
+    function triggerF4() {
+      const p = state[state.activePane];
+      const item = p.files[p.selectedIndex];
+      if (!item) return;
+      document.getElementById('editorTitle').innerText = 'F4 Redigerare: ' + item.name;
+      const text = item.name + ' innehåll:\n\n// Redigera denna fil fritt!\nfunction example() {\n  console.log("Hello from RL Commander");\n}';
+      document.getElementById('editorTextarea').value = text;
+      state.editorOriginal = text;
+      document.getElementById('editorDirtyTag').classList.add('hidden');
+      document.getElementById('editorStatusBanner').classList.add('hidden');
+      document.getElementById('modalEditor').classList.remove('hidden');
+    }
+
+    function onEditorInput() {
+      const current = document.getElementById('editorTextarea').value;
+      if (current !== state.editorOriginal) {
+        document.getElementById('editorDirtyTag').classList.remove('hidden');
+      } else {
+        document.getElementById('editorDirtyTag').classList.add('hidden');
+      }
+    }
+
+    function saveEditorFile() {
+      state.editorOriginal = document.getElementById('editorTextarea').value;
+      document.getElementById('editorDirtyTag').classList.add('hidden');
+      document.getElementById('editorStatusBanner').classList.remove('hidden');
+      setTimeout(() => document.getElementById('editorStatusBanner').classList.add('hidden'), 3000);
+    }
+
+    function openSearchModal() {
+      document.getElementById('modalSearch').classList.remove('hidden');
+    }
+
+    function runSearch() {
+      const query = document.getElementById('searchInput').value || 'config';
+      document.getElementById('searchResults').innerHTML = `
+        <div class="p-2 rounded bg-slate-900 border border-slate-800 flex justify-between items-center cursor-pointer hover:border-purple-600">
+          <div><span class="font-bold text-purple-300">${query}_match.rs</span> <span class="text-slate-500 text-[11px]">\${state[state.activePane].path}/${query}_match.rs</span></div>
+          <i class="fa-solid fa-arrow-right text-purple-400"></i>
+        </div>
+      `;
+    }
+
+    function triggerF5() {
+      const p = state[state.activePane];
+      const item = p.files[p.selectedIndex];
+      showNotif(`Kopierar ${item.name}...`);
+    }
+
+    function triggerF6() {
+      const p = state[state.activePane];
+      const item = p.files[p.selectedIndex];
+      showNotif(`Flyttar ${item.name}...`);
+    }
+
+    function triggerF7() {
+      const name = prompt('Ange namn på ny mapp:');
+      if (name) alert('Skapade mappen: ' + name);
+    }
+
+    function triggerF8() {
+      const p = state[state.activePane];
+      const item = p.files[p.selectedIndex];
+      if (confirm(`Vill du verkligen radera ${item.name}?`)) {
+        alert(`${item.name} raderades!`);
+      }
+    }
+
+    function openSftpModal() {
+      document.getElementById('modalSftp').classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function showNotif(msg) {
+      document.getElementById('notifText').innerText = msg;
+      document.getElementById('notificationBanner').classList.remove('hidden');
+      setTimeout(() => {
+        document.getElementById('notifText').innerText = msg + ' Slutförd!';
+        document.getElementById('notifIcon').className = 'fa-solid fa-circle-check text-emerald-400';
+        setTimeout(() => document.getElementById('notificationBanner').classList.add('hidden'), 3000);
+      }, 1200);
+    }
+
+    window.onkeydown = (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        toggleActivePane();
+      } else if (e.key === 'F3') {
+        e.preventDefault();
+        triggerF3();
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        triggerF4();
+      } else if (e.key === 'F5') {
+        e.preventDefault();
+        triggerF5();
+      } else if (e.key === 'F6') {
+        e.preventDefault();
+        triggerF6();
+      } else if (e.key === 'F7' && !e.altKey) {
+        e.preventDefault();
+        triggerF7();
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        triggerF8();
+      } else if (e.altKey && e.key === 'F7') {
+        e.preventDefault();
+        openSearchModal();
+      } else if (e.key === 'Escape') {
+        closeModal('modalViewer');
+        closeModal('modalEditor');
+        closeModal('modalSearch');
+        closeModal('modalSftp');
+      }
+    };
+
+    renderPanes();
+  </script>
+</body>
+</html>
