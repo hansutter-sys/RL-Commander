@@ -15,6 +15,7 @@ const initialPaneState = (id: PaneId, path: string): PaneState => ({
   isSftp: false,
   loading: false,
   error: null,
+  quickFilter: "",
 });
 
 export const leftPane = writable<PaneState>(initialPaneState("left", "/"));
@@ -33,10 +34,23 @@ export const activeTransfer = writable<TransferProgressEvent | null>(null);
 // Modal states
 export const showSftpModal = writable<boolean>(false);
 export const showViewerModal = writable<boolean>(false);
+export const showEditorModal = writable<boolean>(false);
+export const showSearchModal = writable<boolean>(false);
 export const showCreateDirModal = writable<boolean>(false);
 export const showDeleteModal = writable<boolean>(false);
 
 export const viewerFilePath = writable<string>("");
+export const editorFilePath = writable<string>("");
+
+export const bookmarks = writable<Array<{ name: string; path: string; icon?: string }>>([
+  { name: "Root (/)", path: "/", icon: "HardDrive" },
+  { name: "Hem (~)", path: "/home", icon: "Home" },
+  { name: "Dokument", path: "/home/Dokument", icon: "Folder" },
+  { name: "Hämtningar", path: "/home/Hämtningar", icon: "Download" },
+  { name: "Projekt", path: "/home/hans/RL-Commander", icon: "Code" },
+  { name: "/tmp", path: "/tmp", icon: "FolderArchive" },
+  { name: "/etc", path: "/etc", icon: "Settings" },
+]);
 
 export function toggleActivePane() {
   activePane.update((curr) => (curr === "left" ? "right" : "left"));

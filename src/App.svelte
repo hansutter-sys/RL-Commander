@@ -4,6 +4,8 @@
   import Splitter from "./lib/components/Splitter.svelte";
   import Toolbar from "./lib/components/Toolbar.svelte";
   import FileViewerModal from "./lib/components/FileViewerModal.svelte";
+  import FileEditorModal from "./lib/components/FileEditorModal.svelte";
+  import SearchModal from "./lib/components/SearchModal.svelte";
   import CreateDirModal from "./lib/components/CreateDirModal.svelte";
   import DeleteConfirmModal from "./lib/components/DeleteConfirmModal.svelte";
   import SftpModal from "./lib/components/SftpModal.svelte";
@@ -18,15 +20,18 @@
     refreshPane,
     toggleSelection,
     showViewerModal,
+    showEditorModal,
+    showSearchModal,
     showCreateDirModal,
     showDeleteModal,
     showSftpModal,
     viewerFilePath,
+    editorFilePath,
     activeTransfer,
   } from "./lib/stores/commander";
   import { copyItemsAsync } from "./lib/tauri";
   import type { TransferProgressEvent } from "./lib/types";
-  import { ShieldAlert, Cpu, ArrowLeftRight, Terminal, CheckCircle2, HardDrive, RefreshCw, Server } from "lucide-svelte";
+  import { Cpu, ArrowLeftRight, CheckCircle2, RefreshCw, Server, Search } from "lucide-svelte";
 
   let isTransferring = false;
   let transferNotification: string | null = null;
@@ -51,6 +56,8 @@
     // Disable global hotkeys if any modal is open
     let modalsOpen = false;
     showViewerModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
+    showEditorModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
+    showSearchModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
     showCreateDirModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
     showDeleteModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
     showSftpModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
@@ -61,7 +68,15 @@
         showCreateDirModal.set(false);
         showDeleteModal.set(false);
         showSftpModal.set(false);
+        showSearchModal.set(false);
       }
+      return;
+    }
+
+    // Alt+F7 Search
+    if (e.altKey && e.key === "F7") {
+      e.preventDefault();
+      showSearchModal.set(true);
       return;
     }
 
@@ -132,9 +147,15 @@
     }
 
     // Function keys (F3 - F8)
-    if (e.key === "F3" || e.key === "F4") {
+    if (e.key === "F3") {
       e.preventDefault();
       triggerView();
+      return;
+    }
+
+    if (e.key === "F4") {
+      e.preventDefault();
+      triggerEdit();
       return;
     }
 
@@ -174,6 +195,17 @@
     }
   }
 
+  function triggerEdit() {
+    const state = $activePaneState;
+    if (state.files.length > 0 && state.selectedIndex < state.files.length) {
+      const item = state.files[state.selectedIndex];
+      if (!item.is_dir) {
+        editorFilePath.set(item.path);
+        showEditorModal.set(true);
+      }
+    }
+  }
+
   async function triggerCopy(isMove = false) {
     const srcState = $activePaneState;
     const destState = $inactivePaneState;
@@ -195,7 +227,6 @@
 
       await copyItemsAsync(pathsToCopy, destState.currentPath, isMove, srcState.sftpConfig);
 
-      // In browser preview mock simulation:
       setTimeout(() => {
         refreshPane("left");
         refreshPane("right");
@@ -225,7 +256,7 @@
       </div>
       <div>
         <h1 class="font-black text-base tracking-wider bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
-          RL COMMANDER <span class="text-xs font-mono font-normal text-slate-400">v1.0</span>
+          RL COMMANDER <span class="text-xs font-mono font-normal text-slate-400">v1.1</span>
         </h1>
         <p class="text-[10px] font-mono text-slate-400 -mt-0.5">High Performance Dual-Pane & SFTP Engine</p>
       </div>
@@ -249,6 +280,13 @@
     </div>
 
     <div class="flex items-center gap-2">
+      <button
+        on:click={() => showSearchModal.set(true)}
+        class="bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-800/80 text-indigo-300 px-3 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+      >
+        <Search class="w-3.5 h-3.5 text-indigo-400" />
+        <span>Sök (Alt+F7)</span>
+      </button>
       <button
         on:click={() => showSftpModal.set(true)}
         class="bg-purple-950/60 hover:bg-purple-900 border border-purple-800/80 text-purple-300 px-3 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-sm"
@@ -298,7 +336,7 @@
   <!-- Bottom Function Key Toolbar -->
   <Toolbar
     onView={triggerView}
-    onEdit={triggerView}
+    onEdit={triggerEdit}
     onCopy={() => triggerCopy(false)}
     onMove={() => triggerCopy(true)}
     onCreateDir={() => showCreateDirModal.set(true)}
@@ -307,6 +345,8 @@
 
   <!-- Modals -->
   <FileViewerModal />
+  <FileEditorModal />
+  <SearchModal />
   <CreateDirModal />
   <DeleteConfirmModal />
   <SftpModal />

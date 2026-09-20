@@ -183,4 +183,59 @@ impl FileSystemProvider for LocalFileSystem {
         let text = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
         Ok(text)
     }
+
+    async fn write_file(&self, path: &str, content: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        tokio::fs::write(path, content.as_bytes()).await?;
+        Ok(())
+    }
+
+    async fn search_files(&self, base_path: &str, query: &str) -> Result<Vec<FileItem>, Box<dyn Error + Send + Sync>> {
+        let query_lower = query.to_lowercase();
+        let mut results = Vec::new();
+        let mut stack = vec![(Path::new(base_path).to_path_buf(), 0)];
+
+        while let Some((dir, depth)) = stack.pop() {
+            if depth > 8 || results.len() >= 300 {
+                continue;
+            }
+            let mut read_dir = match tokio::fs::read_dir(&dir).await {
+                Ok(rd) => rd,
+                Err(_) => continue,
+            };
+            while let Ok(Some(entry)) = read_dir.next_entry().await {
+                let metadata = match entry.metadata().await {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                let is_dir = metadata.is_dir();
+
+                if file_name.to_lowercase().contains(&query_lower) {
+                    let modified = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+
+                    results.push(FileItem {
+                        name: file_name.clone(),
+                        path: entry.path().to_string_lossy().to_string(),
+                        size: if is_dir { 0 } else { metadata.len() },
+                        is_dir,
+                        modified,
+                        permissions: if is_dir { "drwxr-xr-x".to_string() } else { "-rw-r--r--".to_string() },
+                        is_symlink: metadata.is_symlink(),
+                        is_hidden: file_name.starts_with('.'),
+                    });
+                }
+
+                if is_dir && !file_name.starts_with('.') && file_name != "node_modules" && file_name != "target" {
+                    stack.push((entry.path(), depth + 1));
+                }
+            }
+        }
+
+        Ok(results)
+    }
 }

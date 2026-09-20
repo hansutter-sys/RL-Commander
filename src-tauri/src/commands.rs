@@ -73,6 +73,36 @@ pub async fn read_file_text(
 }
 
 #[tauri::command]
+pub async fn write_file_text(
+    path: String,
+    content: String,
+    sftp_config: Option<SftpConfig>,
+) -> Result<(), String> {
+    if let Some(config) = sftp_config {
+        let sftp_fs = SftpFileSystem::new(config);
+        sftp_fs.write_file(&path, &content).await.map_err(|e| e.to_string())
+    } else {
+        let local_fs = LocalFileSystem::new();
+        local_fs.write_file(&path, &content).await.map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn search_files(
+    base_path: String,
+    query: String,
+    sftp_config: Option<SftpConfig>,
+) -> Result<Vec<FileItem>, String> {
+    if let Some(config) = sftp_config {
+        let sftp_fs = SftpFileSystem::new(config);
+        sftp_fs.search_files(&base_path, &query).await.map_err(|e| e.to_string())
+    } else {
+        let local_fs = LocalFileSystem::new();
+        local_fs.search_files(&base_path, &query).await.map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
 pub async fn copy_items_async(
     app: AppHandle,
     src_paths: Vec<String>,

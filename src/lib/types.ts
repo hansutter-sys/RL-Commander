@@ -36,6 +36,13 @@ export interface TransferProgressEvent {
   error?: string;
 }
 
+export interface Bookmark {
+  name: string;
+  path: string;
+  icon?: string;
+  isSftp?: boolean;
+}
+
 export type PaneId = "left" | "right";
 
 export interface PaneState {
@@ -50,4 +57,5 @@ export interface PaneState {
   sftpConfig?: SftpConfig;
   loading: boolean;
   error: string | null;
+  quickFilter: string;
 }

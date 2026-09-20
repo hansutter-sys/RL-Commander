@@ -51,4 +51,6 @@ pub trait FileSystemProvider: Send + Sync {
     async fn remove(&self, path: &str, is_dir: bool) -> Result<(), Box<dyn Error + Send + Sync>>;
     async fn exists(&self, path: &str) -> Result<bool, Box<dyn Error + Send + Sync>>;
     async fn read_file_preview(&self, path: &str, max_bytes: usize) -> Result<String, Box<dyn Error + Send + Sync>>;
+    async fn write_file(&self, path: &str, content: &str) -> Result<(), Box<dyn Error + Send + Sync>>;
+    async fn search_files(&self, base_path: &str, query: &str) -> Result<Vec<FileItem>, Box<dyn Error + Send + Sync>>;
 }

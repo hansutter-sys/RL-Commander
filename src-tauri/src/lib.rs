@@ -14,6 +14,8 @@ pub fn run() {
             create_directory,
             delete_items,
             read_file_text,
+            write_file_text,
+            search_files,
             copy_items_async,
         ])
         .run(tauri::generate_context!())

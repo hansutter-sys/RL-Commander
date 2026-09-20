@@ -2,7 +2,7 @@ use super::traits::{FileItem, FileSystemProvider, SftpConfig};
 use async_trait::async_trait;
 use ssh2::Session;
 use std::error::Error;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 
@@ -171,6 +171,76 @@ impl FileSystemProvider for SftpFileSystem {
             let bytes_read = remote_file.read(&mut buffer)?;
             let text = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
             Ok(text)
+        })
+        .await?
+    }
+
+    async fn write_file(&self, path: &str, content: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let config_clone = self.config.clone();
+        let path_str = path.to_string();
+        let content_bytes = content.as_bytes().to_vec();
+
+        tokio::task::spawn_blocking(move || {
+            let sftp_fs = SftpFileSystem::new(config_clone);
+            let (_sess, sftp) = sftp_fs.connect()?;
+            let mut remote_file = sftp.create(Path::new(&path_str))?;
+            remote_file.write_all(&content_bytes)?;
+            Ok(())
+        })
+        .await?
+    }
+
+    async fn search_files(&self, base_path: &str, query: &str) -> Result<Vec<FileItem>, Box<dyn Error + Send + Sync>> {
+        let config_clone = self.config.clone();
+        let base_path_str = base_path.to_string();
+        let query_str = query.to_lowercase();
+
+        tokio::task::spawn_blocking(move || {
+            let sftp_fs = SftpFileSystem::new(config_clone);
+            let (_sess, sftp) = sftp_fs.connect()?;
+
+            let mut results = Vec::new();
+            let mut stack = vec![(base_path_str, 0)];
+
+            while let Some((current_dir, depth)) = stack.pop() {
+                if depth > 6 || results.len() >= 200 {
+                    continue;
+                }
+                let entries = match sftp.readdir(Path::new(&current_dir)) {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+                for (entry_path, stat) in entries {
+                    let file_name = entry_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    if file_name.is_empty() || file_name == "." || file_name == ".." {
+                        continue;
+                    }
+
+                    let is_dir = stat.is_dir();
+                    if file_name.to_lowercase().contains(&query_str) {
+                        results.push(FileItem {
+                            name: file_name.clone(),
+                            path: entry_path.to_string_lossy().to_string(),
+                            size: if is_dir { 0 } else { stat.size.unwrap_or(0) },
+                            is_dir,
+                            modified: stat.mtime.unwrap_or(0),
+                            permissions: if is_dir { "drwxr-xr-x".to_string() } else { "-rw-r--r--".to_string() },
+                            is_symlink: stat.is_symlink(),
+                            is_hidden: file_name.starts_with('.'),
+                        });
+                    }
+
+                    if is_dir && !file_name.starts_with('.') && file_name != "node_modules" {
+                        stack.push((entry_path.to_string_lossy().to_string(), depth + 1));
+                    }
+                }
+            }
+
+            Ok(results)
         })
         .await?
     }

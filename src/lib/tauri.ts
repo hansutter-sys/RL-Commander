@@ -27,6 +27,15 @@ async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     if (cmd === "read_file_text") {
       return "# RLCommander File Preview\n\nThis is a sample file content for demonstration." as unknown as T;
     }
+    if (cmd === "write_file_text") {
+      return undefined as unknown as T;
+    }
+    if (cmd === "search_files") {
+      const query = (args?.query as string) || "";
+      return [
+        { name: `matched_${query}.txt`, path: `/home/user/matched_${query}.txt`, size: 2048, is_dir: false, modified: Date.now() / 1000, permissions: "-rw-r--r--", is_symlink: false, is_hidden: false }
+      ] as unknown as T;
+    }
     return Promise.resolve({} as T);
   }
 }
@@ -49,6 +58,14 @@ export async function deleteItems(items: Array<[string, boolean]>, sftpConfig?: 
 
 export async function readFileText(path: string, maxBytes?: number, sftpConfig?: SftpConfig): Promise<string> {
   return safeInvoke<string>("read_file_text", { path, maxBytes, sftpConfig });
+}
+
+export async function writeFileText(path: string, content: string, sftpConfig?: SftpConfig): Promise<void> {
+  return safeInvoke<void>("write_file_text", { path, content, sftpConfig });
+}
+
+export async function searchFiles(basePath: string, query: string, sftpConfig?: SftpConfig): Promise<FileItem[]> {
+  return safeInvoke<FileItem[]>("search_files", { basePath, query, sftpConfig });
 }
 
 export async function copyItemsAsync(
