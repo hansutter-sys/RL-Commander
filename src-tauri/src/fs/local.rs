@@ -71,16 +71,22 @@ impl LocalFileSystem {
 
         drives
     }
+
+    pub fn sanitize_path(path_str: &str) -> std::path::PathBuf {
+        let p = if path_str.is_empty() {
+            std::env::current_dir().unwrap_or_else(|_| Path::new("/").to_path_buf())
+        } else {
+            Path::new(path_str).to_path_buf()
+        };
+        // Canonicalize if path exists to resolve symlinks and redundant relative components
+        p.canonicalize().unwrap_or(p)
+    }
 }
 
 #[async_trait]
 impl FileSystemProvider for LocalFileSystem {
     async fn list_directory(&self, path_str: &str) -> Result<Vec<FileItem>, Box<dyn Error + Send + Sync>> {
-        let target_path = if path_str.is_empty() {
-            std::env::current_dir().unwrap_or_else(|_| Path::new("/").to_path_buf())
-        } else {
-            Path::new(path_str).to_path_buf()
-        };
+        let target_path = LocalFileSystem::sanitize_path(path_str);
 
         let mut items = Vec::new();
 

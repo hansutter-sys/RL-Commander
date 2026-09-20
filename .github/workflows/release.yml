@@ -44,6 +44,9 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
+      - name: Security Vulnerability Audit (Cargo Audit)
+        run: cargo install cargo-audit && cargo audit --deny warnings || true
+
       - name: Build Tauri Desktop Application & Create GitHub Release
         uses: tauri-apps/tauri-action@v0
         env:
