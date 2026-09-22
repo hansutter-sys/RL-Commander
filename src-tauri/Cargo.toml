@@ -1,6 +1,6 @@
 [package]
 name = "rlcommander"
-version = "1.2.0"
+version = "1.2.1"
 description = "RLCommander - Total Commander Clone with SFTP Support"
 authors = ["RLCommander Team"]
 edition = "2021"
