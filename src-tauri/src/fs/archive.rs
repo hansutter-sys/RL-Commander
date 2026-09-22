@@ -106,7 +106,7 @@ pub fn unzip_archive(zip_path: String, dest_dir: String) -> Result<(), String> {
                 }
             }
             let mut outfile = fs::File::create(&outpath).map_err(|e| format!("Failed to create file {:?}: {}", outpath, e))?;
-            std::io::copy(&mut file, &outfile).map_err(|e| format!("Failed to extract file {:?}: {}", outpath, e))?;
+            std::io::copy(&mut file, &mut outfile).map_err(|e| format!("Failed to extract file {:?}: {}", outpath, e))?;
         }
 
         #[cfg(unix)]
