@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { FileItem, PaneId } from "../types";
-  import { Folder, FileCode, FileText, Image, Archive, HardDrive, Terminal, CheckCircle2 } from "lucide-svelte";
+  import ContextMenu from "./ContextMenu.svelte";
+  import { Folder, FileCode, FileText, Image, Archive, Terminal } from "lucide-svelte";
 
   export let files: FileItem[] = [];
   export let selectedIndex: number = 0;
@@ -11,6 +12,19 @@
   export let onSelect: (index: number) => void;
   export let onOpen: (item: FileItem) => void;
   export let onToggleSelection: (item: FileItem) => void;
+
+  export let onView: (item: FileItem) => void;
+  export let onEdit: (item: FileItem) => void;
+  export let onCopy: (item: FileItem) => void;
+  export let onMove: (item: FileItem) => void;
+  export let onDelete: (item: FileItem) => void;
+  export let onZip: (item: FileItem) => void;
+  export let onUnzip: (item: FileItem) => void;
+
+  let contextMenuVisible = false;
+  let contextMenuX = 0;
+  let contextMenuY = 0;
+  let contextMenuItem: FileItem | null = null;
 
   function formatBytes(bytes: number): string {
     if (bytes === 0) return "<DIR>";
@@ -35,11 +49,43 @@
     if (["sh", "bash", "exe"].includes(ext || "")) return Terminal;
     return FileText;
   }
+
+  function handleContextMenu(e: MouseEvent, item: FileItem, index: number) {
+    if (item.name === "..") return;
+    e.preventDefault();
+    e.stopPropagation();
+    onSelect(index);
+    contextMenuX = e.clientX;
+    contextMenuY = e.clientY;
+    contextMenuItem = item;
+    contextMenuVisible = true;
+  }
+
+  function handleDragStart(e: DragEvent, item: FileItem) {
+    if (item.name === "..") {
+      e.preventDefault();
+      return;
+    }
+
+    let pathsToDrag = Array.from(selectedPaths);
+    if (!selectedPaths.has(item.path) || pathsToDrag.length === 0) {
+      pathsToDrag = [item.path];
+    }
+
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "copyMove";
+      e.dataTransfer.setData("application/json", JSON.stringify({
+        paths: pathsToDrag,
+        sourcePaneId: paneId
+      }));
+      e.dataTransfer.setData("text/plain", JSON.stringify(pathsToDrag));
+    }
+  }
 </script>
 
-<div class="flex-1 overflow-y-auto bg-slate-900/90 text-sm mono-font border-t border-slate-800">
+<div class="flex-1 overflow-y-auto bg-slate-900/90 text-sm mono-font border-t border-slate-800 relative">
   <table class="w-full text-left border-collapse">
-    <thead class="sticky top-0 bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 text-xs select-none">
+    <thead class="sticky top-0 bg-slate-950 text-slate-400 font-semibold border-b border-slate-800 text-xs select-none z-10">
       <tr>
         <th class="w-8 px-2 py-1.5 text-center">✓</th>
         <th class="px-3 py-1.5">Namn</th>
@@ -51,13 +97,16 @@
     <tbody class="divide-y divide-slate-800/50">
       {#each files as item, index (item.path + "_" + index)}
         <tr
-          class="cursor-pointer transition-colors duration-75 text-xs font-mono
+          draggable={item.name !== ".."}
+          on:dragstart={(e) => handleDragStart(e, item)}
+          on:contextmenu={(e) => handleContextMenu(e, item, index)}
+          on:click={() => onSelect(index)}
+          on:dblclick={() => onOpen(item)}
+          class="cursor-pointer transition-colors duration-75 text-xs font-mono select-none
             {index === selectedIndex && isActive ? 'bg-blue-600 text-white font-bold' : ''}
             {index === selectedIndex && !isActive ? 'bg-slate-800 text-slate-200 border-l-2 border-blue-500' : ''}
             {selectedPaths.has(item.path) && index !== selectedIndex ? 'text-amber-400 font-semibold bg-amber-950/20' : ''}
             {index !== selectedIndex && !selectedPaths.has(item.path) ? 'hover:bg-slate-800/60 text-slate-300' : ''}"
-          on:click={() => onSelect(index)}
-          on:dblclick={() => onOpen(item)}
         >
           <td class="w-8 px-2 py-1 text-center" on:click|stopPropagation={() => onToggleSelection(item)}>
             {#if selectedPaths.has(item.path)}
@@ -101,4 +150,21 @@
       {/if}
     </tbody>
   </table>
+
+  <!-- Right click Context Menu -->
+  <ContextMenu
+    x={contextMenuX}
+    y={contextMenuY}
+    visible={contextMenuVisible}
+    item={contextMenuItem}
+    {paneId}
+    onClose={() => (contextMenuVisible = false)}
+    onZip={(item) => onZip(item)}
+    onUnzip={(item) => onUnzip(item)}
+    onView={(item) => onView(item)}
+    onEdit={(item) => onEdit(item)}
+    onCopy={(item) => onCopy(item)}
+    onMove={(item) => onMove(item)}
+    onDelete={(item) => onDelete(item)}
+  />
 </div>

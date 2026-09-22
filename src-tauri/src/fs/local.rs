@@ -7,6 +7,67 @@ use std::time::UNIX_EPOCH;
 
 pub struct LocalFileSystem;
 
+#[cfg(unix)]
+pub fn get_disk_space(path: &str) -> (u64, u64) {
+    use std::ffi::CString;
+    use std::mem::MaybeUninit;
+
+    let c_path = match CString::new(path) {
+        Ok(c) => c,
+        Err(_) => return (0, 0),
+    };
+
+    unsafe {
+        let mut stat: MaybeUninit<libc::statvfs> = MaybeUninit::uninit();
+        if libc::statvfs(c_path.as_ptr(), stat.as_mut_ptr()) == 0 {
+            let stat = stat.assume_init();
+            let block_size = if stat.f_frsize > 0 {
+                stat.f_frsize as u64
+            } else {
+                stat.f_bsize as u64
+            };
+            let total_space = stat.f_blocks as u64 * block_size;
+            let available_space = stat.f_bavail as u64 * block_size;
+            (total_space, available_space)
+        } else {
+            (0, 0)
+        }
+    }
+}
+
+#[cfg(windows)]
+pub fn get_disk_space(path: &str) -> (u64, u64) {
+    use std::os::windows::ffi::OsStrExt;
+    use std::ffi::OsStr;
+
+    let wide: Vec<u16> = OsStr::new(path).encode_wide().chain(std::iter::once(0)).collect();
+    let mut free_bytes_available: u64 = 0;
+    let mut total_bytes: u64 = 0;
+    let mut total_free_bytes: u64 = 0;
+
+    extern "system" {
+        fn GetDiskFreeSpaceExW(
+            lpDirectoryName: *const u16,
+            lpFreeBytesAvailableToCaller: *mut u64,
+            lpTotalNumberOfBytes: *mut u64,
+            lpTotalNumberOfFreeBytes: *mut u64,
+        ) -> i32;
+    }
+
+    unsafe {
+        if GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut free_bytes_available,
+            &mut total_bytes,
+            &mut total_free_bytes,
+        ) != 0 {
+            (total_bytes, free_bytes_available)
+        } else {
+            (0, 0)
+        }
+    }
+}
+
 impl LocalFileSystem {
     pub fn new() -> Self {
         Self
@@ -21,11 +82,12 @@ impl LocalFileSystem {
                 let drive_str = format!("{}:\\", drive_letter as char);
                 let path = Path::new(&drive_str);
                 if path.exists() {
+                    let (total_space, available_space) = get_disk_space(&drive_str);
                     drives.push(DriveInfo {
                         name: format!("Disk ({}:)", drive_letter as char),
                         path: drive_str,
-                        total_space: 0,
-                        available_space: 0,
+                        total_space,
+                        available_space,
                         is_removable: drive_letter == b'A' || drive_letter == b'B',
                     });
                 }
@@ -34,20 +96,22 @@ impl LocalFileSystem {
 
         #[cfg(not(target_os = "windows"))]
         {
+            let (total_space, available_space) = get_disk_space("/");
             drives.push(DriveInfo {
                 name: "Root (/)".to_string(),
                 path: "/".to_string(),
-                total_space: 0,
-                available_space: 0,
+                total_space,
+                available_space,
                 is_removable: false,
             });
 
             if let Ok(home) = std::env::var("HOME") {
+                let (total_space, available_space) = get_disk_space(&home);
                 drives.push(DriveInfo {
                     name: "Home (~)".to_string(),
                     path: home,
-                    total_space: 0,
-                    available_space: 0,
+                    total_space,
+                    available_space,
                     is_removable: false,
                 });
             }
@@ -56,11 +120,13 @@ impl LocalFileSystem {
                 if let Ok(entries) = fs::read_dir("/media") {
                     for entry in entries.flatten() {
                         if entry.path().is_dir() {
+                            let media_path = entry.path().to_string_lossy().to_string();
+                            let (total_space, available_space) = get_disk_space(&media_path);
                             drives.push(DriveInfo {
                                 name: format!("Media: {}", entry.file_name().to_string_lossy()),
-                                path: entry.path().to_string_lossy().to_string(),
-                                total_space: 0,
-                                available_space: 0,
+                                path: media_path,
+                                total_space,
+                                available_space,
                                 is_removable: true,
                             });
                         }

@@ -241,3 +241,36 @@ pub async fn copy_items_async(
 
     Ok(task_id)
 }
+
+#[tauri::command]
+pub async fn zip_items(
+    src_paths: Vec<String>,
+    dest_zip: Option<String>,
+    zip_path: Option<String>,
+    _sftp_config: Option<SftpConfig>,
+) -> Result<(), String> {
+    let target_zip = dest_zip
+        .or(zip_path)
+        .ok_or_else(|| "Destination zip path must be provided".to_string())?;
+
+    tokio::task::spawn_blocking(move || {
+        crate::fs::archive::zip_items(src_paths, target_zip)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+#[tauri::command]
+pub async fn unzip_archive(
+    zip_path: String,
+    dest_dir: String,
+    _sftp_config: Option<SftpConfig>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        crate::fs::archive::unzip_archive(zip_path, dest_dir)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+}
+
+

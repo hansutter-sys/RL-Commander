@@ -17,6 +17,8 @@ pub fn run() {
             write_file_text,
             search_files,
             copy_items_async,
+            zip_items,
+            unzip_archive,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

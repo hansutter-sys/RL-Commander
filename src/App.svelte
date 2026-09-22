@@ -9,6 +9,8 @@
   import CreateDirModal from "./lib/components/CreateDirModal.svelte";
   import DeleteConfirmModal from "./lib/components/DeleteConfirmModal.svelte";
   import SftpModal from "./lib/components/SftpModal.svelte";
+  import SettingsModal from "./lib/components/SettingsModal.svelte";
+  import ZipModal from "./lib/components/ZipModal.svelte";
   import {
     leftPane,
     rightPane,
@@ -25,13 +27,16 @@
     showCreateDirModal,
     showDeleteModal,
     showSftpModal,
+    showSettingsModal,
+    showZipModal,
     viewerFilePath,
     editorFilePath,
     activeTransfer,
   } from "./lib/stores/commander";
-  import { copyItemsAsync } from "./lib/tauri";
+  import { settings } from "./lib/stores/settings";
+  import { copyItemsAsync, deleteItems } from "./lib/tauri";
   import type { TransferProgressEvent } from "./lib/types";
-  import { Cpu, ArrowLeftRight, CheckCircle2, RefreshCw, Server, Search } from "lucide-svelte";
+  import { Cpu, ArrowLeftRight, CheckCircle2, RefreshCw, Server, Search, Settings } from "lucide-svelte";
 
   let isTransferring = false;
   let transferNotification: string | null = null;
@@ -61,6 +66,8 @@
     showCreateDirModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
     showDeleteModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
     showSftpModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
+    showSettingsModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
+    showZipModal.subscribe((v) => (modalsOpen = modalsOpen || v))();
 
     if (modalsOpen) {
       if (e.key === "Escape") {
@@ -69,6 +76,8 @@
         showDeleteModal.set(false);
         showSftpModal.set(false);
         showSearchModal.set(false);
+        showSettingsModal.set(false);
+        showZipModal.set(false);
       }
       return;
     }
@@ -179,7 +188,7 @@
 
     if (e.key === "F8") {
       e.preventDefault();
-      showDeleteModal.set(true);
+      triggerDelete();
       return;
     }
   }
@@ -243,6 +252,34 @@
   function triggerMove() {
     triggerCopy(true);
   }
+
+  async function triggerDelete() {
+    if ($settings.confirmOnDelete) {
+      showDeleteModal.set(true);
+    } else {
+      const srcState = $activePaneState;
+      let itemsToDelete = Array.from(srcState.selectedPaths).map((p) => {
+        const fileObj = srcState.files.find((f) => f.path === p);
+        return [p, fileObj ? fileObj.is_dir : false] as [string, boolean];
+      });
+
+      if (itemsToDelete.length === 0 && srcState.files[srcState.selectedIndex]) {
+        const current = srcState.files[srcState.selectedIndex];
+        if (current.name !== "..") {
+          itemsToDelete = [[current.path, current.is_dir]];
+        }
+      }
+
+      if (itemsToDelete.length === 0) return;
+
+      try {
+        await deleteItems(itemsToDelete, srcState.sftpConfig);
+        refreshPane($activePane);
+      } catch (e: any) {
+        alert(`Fel vid radering:\n${e?.toString()}`);
+      }
+    }
+  }
 </script>
 
 <svelte:window on:keydown={handleKeyDown} />
@@ -256,7 +293,7 @@
       </div>
       <div>
         <h1 class="font-black text-base tracking-wider bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
-          RL COMMANDER <span class="text-xs font-mono font-normal text-slate-400">v1.1</span>
+          RL COMMANDER <span class="text-xs font-mono font-normal text-slate-400">v1.2</span>
         </h1>
         <p class="text-[10px] font-mono text-slate-400 -mt-0.5">High Performance Dual-Pane & SFTP Engine</p>
       </div>
@@ -293,6 +330,14 @@
       >
         <Server class="w-3.5 h-3.5 text-purple-400" />
         <span>SFTP Manager</span>
+      </button>
+      <button
+        on:click={() => showSettingsModal.set(true)}
+        class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-2.5 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+        title="Inställningar"
+      >
+        <Settings class="w-3.5 h-3.5 text-slate-300" />
+        <span class="hidden sm:inline">Inställningar</span>
       </button>
       <button
         on:click={() => {
@@ -340,7 +385,7 @@
     onCopy={() => triggerCopy(false)}
     onMove={() => triggerCopy(true)}
     onCreateDir={() => showCreateDirModal.set(true)}
-    onDelete={() => showDeleteModal.set(true)}
+    onDelete={triggerDelete}
   />
 
   <!-- Modals -->
@@ -350,4 +395,6 @@
   <CreateDirModal />
   <DeleteConfirmModal />
   <SftpModal />
+  <SettingsModal />
+  <ZipModal />
 </div>

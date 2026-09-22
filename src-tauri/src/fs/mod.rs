@@ -1,3 +1,4 @@
+pub mod archive;
 pub mod local;
 pub mod sftp;
 pub mod traits;

@@ -27,7 +27,7 @@ async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     if (cmd === "read_file_text") {
       return "# RLCommander File Preview\n\nThis is a sample file content for demonstration." as unknown as T;
     }
-    if (cmd === "write_file_text") {
+    if (cmd === "write_file_text" || cmd === "zip_items" || cmd === "unzip_archive") {
       return undefined as unknown as T;
     }
     if (cmd === "search_files") {
@@ -75,4 +75,20 @@ export async function copyItemsAsync(
   sftpConfig?: SftpConfig
 ): Promise<string> {
   return safeInvoke<string>("copy_items_async", { srcPaths, destDir, isMove, sftpConfig });
+}
+
+export async function zipItems(
+  srcPaths: string[],
+  zipPath: string,
+  sftpConfig?: SftpConfig
+): Promise<void> {
+  return safeInvoke<void>("zip_items", { srcPaths, zipPath, sftpConfig });
+}
+
+export async function unzipArchive(
+  zipPath: string,
+  destDir: string,
+  sftpConfig?: SftpConfig
+): Promise<void> {
+  return safeInvoke<void>("unzip_archive", { zipPath, destDir, sftpConfig });
 }
