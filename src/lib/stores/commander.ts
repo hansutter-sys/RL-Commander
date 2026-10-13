@@ -34,6 +34,26 @@ export const inactivePaneState = derived([activePane, leftPane, rightPane], ([$a
 
 export const activeTransfer = writable<TransferProgressEvent | null>(null);
 
+export interface DraggedData {
+  paths: string[];
+  sourcePaneId: PaneId;
+}
+export const draggedItems = writable<DraggedData | null>(null);
+
+export const toastMessage = writable<string | null>(null);
+export function showToast(message: string, duration = 3000) {
+  toastMessage.set(message);
+  setTimeout(() => {
+    toastMessage.set(null);
+  }, duration);
+}
+
+export const activeBookmarkDropdownPane = writable<PaneId | null>(null);
+export function toggleBookmarkDropdown(paneId?: PaneId) {
+  const target = paneId || get(activePane);
+  activeBookmarkDropdownPane.update((curr) => (curr === target ? null : target));
+}
+
 // Modal states
 export const showSftpModal = writable<boolean>(false);
 export const showViewerModal = writable<boolean>(false);
@@ -97,15 +117,24 @@ bookmarks.subscribe((value) => {
 });
 
 export function addBookmark(path: string, name?: string) {
+  const folderName = name?.trim() || path.split("/").filter(Boolean).pop() || path;
   bookmarks.update((bms) => {
-    if (bms.some((b) => b.path === path)) return bms;
-    const folderName = name || path.split("/").filter(Boolean).pop() || path;
+    if (bms.some((b) => b.path === path)) {
+      return bms.map((b) => (b.path === path ? { ...b, name: folderName } : b));
+    }
     return [...bms, { name: folderName, path, icon: "Folder" }];
   });
+  showToast(`Genväg sparad: ${folderName}`);
 }
 
 export function removeBookmark(path: string) {
-  bookmarks.update((bms) => bms.filter((b) => b.path !== path));
+  bookmarks.update((bms) => {
+    const item = bms.find((b) => b.path === path);
+    if (item) {
+      showToast(`Genväg togs bort: ${item.name}`);
+    }
+    return bms.filter((b) => b.path !== path);
+  });
 }
 
 export function toggleActivePane() {
@@ -151,6 +180,57 @@ export function toggleSelection(paneId: PaneId, path: string) {
     }
     return { ...s, selectedPaths: newSet };
   });
+}
+
+export function selectAll(paneId: PaneId) {
+  const store = paneId === "left" ? leftPane : rightPane;
+  store.update((s) => {
+    const newSet = new Set<string>();
+    for (const f of s.files) {
+      if (f.name !== "..") {
+        newSet.add(f.path);
+      }
+    }
+    return { ...s, selectedPaths: newSet };
+  });
+}
+
+export function invertSelection(paneId: PaneId) {
+  const store = paneId === "left" ? leftPane : rightPane;
+  store.update((s) => {
+    const newSet = new Set(s.selectedPaths);
+    for (const f of s.files) {
+      if (f.name !== "..") {
+        if (newSet.has(f.path)) {
+          newSet.delete(f.path);
+        } else {
+          newSet.add(f.path);
+        }
+      }
+    }
+    return { ...s, selectedPaths: newSet };
+  });
+}
+
+export function selectRange(paneId: PaneId, fromIndex: number, toIndex: number) {
+  const store = paneId === "left" ? leftPane : rightPane;
+  store.update((s) => {
+    const newSet = new Set(s.selectedPaths);
+    const min = Math.max(0, Math.min(fromIndex, toIndex));
+    const max = Math.min(s.files.length - 1, Math.max(fromIndex, toIndex));
+    for (let i = min; i <= max; i++) {
+      const f = s.files[i];
+      if (f && f.name !== "..") {
+        newSet.add(f.path);
+      }
+    }
+    return { ...s, selectedPaths: newSet, selectedIndex: toIndex };
+  });
+}
+
+export function clearSelection(paneId: PaneId) {
+  const store = paneId === "left" ? leftPane : rightPane;
+  store.update((s) => ({ ...s, selectedPaths: new Set<string>() }));
 }
 
 export function connectSftp(paneId: PaneId, config: SftpConfig) {

@@ -6,6 +6,9 @@ export interface Settings {
   defaultLeftPath: string;
   defaultRightPath: string;
   confirmOnDelete: boolean;
+  theme: "dark" | "light";
+  pinProtectionEnabled: boolean;
+  pinHash: string;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -14,6 +17,9 @@ const DEFAULT_SETTINGS: Settings = {
   defaultLeftPath: "/",
   defaultRightPath: "/home",
   confirmOnDelete: true,
+  theme: "dark",
+  pinProtectionEnabled: false,
+  pinHash: "",
 };
 
 const STORAGE_KEY = "rl_commander_settings";

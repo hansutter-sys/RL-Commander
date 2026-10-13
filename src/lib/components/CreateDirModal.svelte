@@ -1,5 +1,6 @@
 <script lang="ts">
   import { showCreateDirModal, activePaneState, activePane, refreshPane } from "../stores/commander";
+  import { settings } from "../stores/settings";
   import { createDirectory } from "../tauri";
   import { FolderPlus, X } from "lucide-svelte";
 
@@ -21,39 +22,49 @@
 
 {#if $showCreateDirModal}
   <div class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md shadow-2xl p-5 text-slate-100 font-sans">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
-        <div class="flex items-center gap-2 font-bold text-lg text-blue-400">
+    <div
+      class="border rounded-xl w-full max-w-md shadow-2xl p-5 font-sans transition-colors
+        {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+    >
+      <div class="flex items-center justify-between pb-3 border-b {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'}">
+        <div class="flex items-center gap-2 font-bold text-lg text-blue-500">
           <FolderPlus class="w-5 h-5" />
           <span>F7: Skapa Ny Mapp</span>
         </div>
-        <button on:click={() => showCreateDirModal.set(false)} class="text-slate-400 hover:text-white">
+        <button
+          on:click={() => showCreateDirModal.set(false)}
+          class="{$settings.theme === 'light' ? 'text-slate-400 hover:text-slate-700' : 'text-slate-400 hover:text-white'}"
+        >
           <X class="w-5 h-5" />
         </button>
       </div>
 
       <form on:submit|preventDefault={handleCreate} class="space-y-4 mt-4 font-mono text-xs">
         <div>
-          <label class="block text-slate-400 mb-1">Mappnamn</label>
+          <label for="create-folder-input" class="block mb-1 {$settings.theme === 'light' ? 'text-slate-600 font-sans' : 'text-slate-400 font-sans'}">
+            Mappnamn
+          </label>
           <input
+            id="create-folder-input"
             type="text"
             bind:value={folderName}
             placeholder="ny_mapp"
             required
-            autofocus
-            class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-100 outline-none focus:border-blue-500"
+            class="w-full border rounded px-3 py-2 outline-none focus:border-blue-500 font-mono
+              {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-700 text-slate-100'}"
           />
         </div>
 
-        <div class="text-xs text-slate-500">
-          Mappen skapas i: <span class="text-slate-300 font-bold">{$activePaneState.currentPath}</span>
+        <div class="text-xs {$settings.theme === 'light' ? 'text-slate-500' : 'text-slate-400'}">
+          Mappen skapas i: <span class="font-bold {$settings.theme === 'light' ? 'text-slate-800' : 'text-slate-200'}">{$activePaneState.currentPath}</span>
         </div>
 
-        <div class="flex justify-end gap-2 pt-3 border-t border-slate-800">
+        <div class="flex justify-end gap-2 pt-3 border-t {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'}">
           <button
             type="button"
             on:click={() => showCreateDirModal.set(false)}
-            class="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
+            class="px-4 py-2 rounded font-semibold transition-colors
+              {$settings.theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}"
           >
             Avbryt
           </button>
