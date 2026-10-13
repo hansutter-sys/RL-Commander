@@ -1,6 +1,6 @@
 # RLCommander ⚡
 
-A high-performance, modern dual-pane **Total Commander** clone with native **SFTP** support built with **Tauri v2**, **Rust**, **Svelte 5**, **TypeScript**, and **Tailwind CSS**.
+A high-performance, modern dual-pane file exlorer with native **SFTP** support built with **Tauri v2**, **Rust**, **Svelte 5**, **TypeScript**, and **Tailwind CSS**.
 
 ![RLCommander Dual Pane UI](https://raw.githubusercontent.com/tauri-apps/tauri/dev/app-icon.png)
 
@@ -9,7 +9,7 @@ A high-performance, modern dual-pane **Total Commander** clone with native **SFT
 - 📂 **Dual-Pane File Architecture**: Classic side-by-side active/inactive panel paradigm with independent paths, sorting, and virtualized rendering.
 - 🚀 **Native SFTP Engine**: Integrated high-speed SFTP client powered by Rust (`ssh2` / Tokio async tasks). Connect directly to remote servers inside any pane.
 - ⚡ **High-Performance Virtual Scrolling**: Smooth rendering of directories with 100,000+ files using `@tanstack/svelte-virtual`.
-- ⌨️ **Pure Total Commander Keyboard Navigation**:
+- ⌨️ **Keyboard Navigation**:
   - `Tab`: Toggle active pane focus (Left ↔ Right)
   - `ArrowUp` / `ArrowDown`: Move row cursor
   - `Space` / `Insert`: Toggle selection on current item
