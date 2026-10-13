@@ -1,16 +1,132 @@
 <script lang="ts">
-  import { showSettingsModal } from "../stores/commander";
+  import { showSettingsModal, showToast } from "../stores/commander";
   import { settings } from "../stores/settings";
-  import { Settings, X, HardDrive, Eye, Trash2, Folder, RotateCcw, Check, Monitor, Moon, Sun } from "lucide-svelte";
+  import { hashPin, verifyPin } from "../crypto";
+  import { reEncryptVaultWithNewPin } from "../stores/sftpProfiles";
+  import {
+    Settings,
+    X,
+    HardDrive,
+    Eye,
+    Trash2,
+    Folder,
+    RotateCcw,
+    Check,
+    Monitor,
+    Moon,
+    Sun,
+    Lock,
+    Unlock,
+    ShieldCheck,
+    Key,
+  } from "lucide-svelte";
+
+  // PIN settings state
+  let pinAction: "none" | "enable" | "change" | "disable" = "none";
+  let currentPinInput = "";
+  let newPinInput = "";
+  let confirmPinInput = "";
+  let pinError = "";
 
   function handleReset() {
     if (confirm("Är du säker på att du vill återställa alla inställningar till standard?")) {
       settings.reset();
+      pinAction = "none";
+      pinError = "";
     }
   }
 
   function handleClose() {
     showSettingsModal.set(false);
+    pinAction = "none";
+    pinError = "";
+    currentPinInput = "";
+    newPinInput = "";
+    confirmPinInput = "";
+  }
+
+  async function handleEnablePin() {
+    pinError = "";
+    if (newPinInput.length < 4) {
+      pinError = "PIN-koden måste vara minst 4 tecken eller siffror.";
+      return;
+    }
+    if (newPinInput !== confirmPinInput) {
+      pinError = "PIN-koderna matchar inte.";
+      return;
+    }
+
+    try {
+      const pinHash = await hashPin(newPinInput);
+      await reEncryptVaultWithNewPin(newPinInput);
+      settings.update((s) => ({
+        ...s,
+        pinProtectionEnabled: true,
+        pinHash,
+      }));
+      pinAction = "none";
+      newPinInput = "";
+      confirmPinInput = "";
+      showToast("PIN-kod aktiverad för SFTP-inloggningar!");
+    } catch (e: any) {
+      pinError = `Fel vid kryptering: ${e?.toString()}`;
+    }
+  }
+
+  async function handleChangePin() {
+    pinError = "";
+    const isValidCurrent = await verifyPin(currentPinInput, $settings.pinHash);
+    if (!isValidCurrent) {
+      pinError = "Nuvarande PIN-kod är felaktig.";
+      return;
+    }
+    if (newPinInput.length < 4) {
+      pinError = "Nya PIN-koden måste vara minst 4 tecken eller siffror.";
+      return;
+    }
+    if (newPinInput !== confirmPinInput) {
+      pinError = "De nya PIN-koderna matchar inte.";
+      return;
+    }
+
+    try {
+      const pinHash = await hashPin(newPinInput);
+      await reEncryptVaultWithNewPin(newPinInput, currentPinInput);
+      settings.update((s) => ({
+        ...s,
+        pinHash,
+      }));
+      pinAction = "none";
+      currentPinInput = "";
+      newPinInput = "";
+      confirmPinInput = "";
+      showToast("PIN-koden har ändrats!");
+    } catch (e: any) {
+      pinError = `Fel vid ändring av PIN: ${e?.toString()}`;
+    }
+  }
+
+  async function handleDisablePin() {
+    pinError = "";
+    const isValidCurrent = await verifyPin(currentPinInput, $settings.pinHash);
+    if (!isValidCurrent) {
+      pinError = "Nuvarande PIN-kod är felaktig.";
+      return;
+    }
+
+    try {
+      await reEncryptVaultWithNewPin(null, currentPinInput);
+      settings.update((s) => ({
+        ...s,
+        pinProtectionEnabled: false,
+        pinHash: "",
+      }));
+      pinAction = "none";
+      currentPinInput = "";
+      showToast("PIN-kodsskydd inaktiverat.");
+    } catch (e: any) {
+      pinError = `Fel vid inaktivering: ${e?.toString()}`;
+    }
   }
 </script>
 
@@ -95,6 +211,215 @@
                 <div class="text-[11px] {$settings.theme === 'light' ? 'text-slate-500' : 'text-slate-400'}">Ljus bakgrund & hög kontrast</div>
               </div>
             </button>
+          </div>
+        </div>
+
+        <!-- Security & SFTP PIN Protection Section -->
+        <div class="space-y-3">
+          <h3
+            class="text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5
+              {$settings.theme === 'light' ? 'text-slate-600' : 'text-slate-400'}"
+          >
+            <ShieldCheck class="w-4 h-4 text-purple-500" />
+            Säkerhet & PIN-kod för SFTP
+          </h3>
+
+          <div
+            class="border rounded-lg p-3 space-y-3 transition-colors
+              {$settings.theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/70 border-slate-800'}"
+          >
+            <div class="flex items-center justify-between">
+              <div class="space-y-0.5">
+                <div class="font-medium flex items-center gap-2 {$settings.theme === 'light' ? 'text-slate-800' : 'text-slate-200'}">
+                  <span>Skydda sparade SFTP-inloggningar med PIN</span>
+                  {#if $settings.pinProtectionEnabled}
+                    <span class="text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0.2 rounded font-mono font-bold">
+                      Aktivt ✓
+                    </span>
+                  {/if}
+                </div>
+                <p class="text-xs {$settings.theme === 'light' ? 'text-slate-500' : 'text-slate-400'}">
+                  Kräver PIN-kod för att öppna eller ansluta till dina sparade SFTP-servrar
+                </p>
+              </div>
+
+              {#if !$settings.pinProtectionEnabled}
+                {#if pinAction !== "enable"}
+                  <button
+                    type="button"
+                    on:click={() => {
+                      pinAction = "enable";
+                      newPinInput = "";
+                      confirmPinInput = "";
+                      pinError = "";
+                    }}
+                    class="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-sm transition-all"
+                  >
+                    Aktivera PIN
+                  </button>
+                {/if}
+              {:else}
+                <div class="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    on:click={() => {
+                      pinAction = "change";
+                      currentPinInput = "";
+                      newPinInput = "";
+                      confirmPinInput = "";
+                      pinError = "";
+                    }}
+                    class="px-2.5 py-1 rounded border text-xs font-semibold transition-colors
+                      {$settings.theme === 'light' ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'}"
+                  >
+                    Ändra PIN
+                  </button>
+                  <button
+                    type="button"
+                    on:click={() => {
+                      pinAction = "disable";
+                      currentPinInput = "";
+                      pinError = "";
+                    }}
+                    class="px-2.5 py-1 rounded text-rose-500 hover:bg-rose-500/10 border border-rose-500/30 text-xs font-semibold transition-colors"
+                  >
+                    Stäng av
+                  </button>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Enable PIN Form -->
+            {#if pinAction === "enable"}
+              <div class="pt-3 border-t {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'} space-y-2.5">
+                <div class="text-xs font-semibold text-purple-500">Skapa ny PIN-kod (minst 4 siffror/tecken):</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <input
+                    type="password"
+                    bind:value={newPinInput}
+                    placeholder="Ny PIN-kod"
+                    maxlength="12"
+                    class="border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                      {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                  />
+                  <input
+                    type="password"
+                    bind:value={confirmPinInput}
+                    placeholder="Bekräfta PIN-kod"
+                    maxlength="12"
+                    class="border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                      {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                  />
+                </div>
+                {#if pinError}
+                  <div class="text-rose-500 text-xs font-semibold">{pinError}</div>
+                {/if}
+                <div class="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    on:click={() => (pinAction = "none")}
+                    class="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Avbryt
+                  </button>
+                  <button
+                    type="button"
+                    on:click={handleEnablePin}
+                    class="px-3 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-sm"
+                  >
+                    Spara & Aktivera
+                  </button>
+                </div>
+              </div>
+            {/if}
+
+            <!-- Change PIN Form -->
+            {#if pinAction === "change"}
+              <div class="pt-3 border-t {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'} space-y-2.5">
+                <div class="text-xs font-semibold text-purple-500">Ändra PIN-kod:</div>
+                <div class="space-y-2">
+                  <input
+                    type="password"
+                    bind:value={currentPinInput}
+                    placeholder="Nuvarande PIN-kod"
+                    maxlength="12"
+                    class="w-full border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                      {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                  />
+                  <div class="grid grid-cols-2 gap-2">
+                    <input
+                      type="password"
+                      bind:value={newPinInput}
+                      placeholder="Ny PIN-kod"
+                      maxlength="12"
+                      class="border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                        {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                    />
+                    <input
+                      type="password"
+                      bind:value={confirmPinInput}
+                      placeholder="Bekräfta ny PIN-kod"
+                      maxlength="12"
+                      class="border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                        {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                    />
+                  </div>
+                </div>
+                {#if pinError}
+                  <div class="text-rose-500 text-xs font-semibold">{pinError}</div>
+                {/if}
+                <div class="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    on:click={() => (pinAction = "none")}
+                    class="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Avbryt
+                  </button>
+                  <button
+                    type="button"
+                    on:click={handleChangePin}
+                    class="px-3 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-sm"
+                  >
+                    Spara ny PIN
+                  </button>
+                </div>
+              </div>
+            {/if}
+
+            <!-- Disable PIN Form -->
+            {#if pinAction === "disable"}
+              <div class="pt-3 border-t {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'} space-y-2.5">
+                <div class="text-xs font-semibold text-rose-500">Ange nuvarande PIN-kod för att inaktivera skyddet:</div>
+                <input
+                  type="password"
+                  bind:value={currentPinInput}
+                  placeholder="Nuvarande PIN-kod"
+                  maxlength="12"
+                  class="w-full border rounded px-3 py-1.5 text-xs outline-none focus:border-rose-500
+                    {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                />
+                {#if pinError}
+                  <div class="text-rose-500 text-xs font-semibold">{pinError}</div>
+                {/if}
+                <div class="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    on:click={() => (pinAction = "none")}
+                    class="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Avbryt
+                  </button>
+                  <button
+                    type="button"
+                    on:click={handleDisablePin}
+                    class="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-sm"
+                  >
+                    Inaktivera PIN
+                  </button>
+                </div>
+              </div>
+            {/if}
           </div>
         </div>
 

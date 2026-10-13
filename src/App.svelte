@@ -53,6 +53,8 @@
     Moon,
   } from "lucide-svelte";
 
+  import { initSftpProfiles } from "./lib/stores/sftpProfiles";
+
   let isTransferring = false;
   let transferNotification: string | null = null;
 
@@ -62,6 +64,7 @@
   let isDraggingSplitter = false;
 
   onMount(() => {
+    initSftpProfiles();
     // Load split ratio preference
     if (typeof localStorage !== "undefined") {
       const savedRatio = localStorage.getItem("rl_commander_split_ratio");

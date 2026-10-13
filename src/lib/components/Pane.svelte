@@ -24,7 +24,14 @@
     bookmarks,
     addBookmark,
     removeBookmark,
+    connectSftp,
+    showToast,
   } from "../stores/commander";
+  import {
+    sftpProfiles,
+    isSftpUnlocked,
+    profileToSftpConfig,
+  } from "../stores/sftpProfiles";
   import FileList from "./FileList.svelte";
   import {
     HardDrive,
@@ -65,7 +72,22 @@
 
   function handleDriveChange(e: Event) {
     const target = e.target as HTMLSelectElement;
-    navigatePane(paneId, target.value);
+    const val = target.value;
+    if (val.startsWith("sftp_profile_")) {
+      const profileId = val.replace("sftp_profile_", "");
+      const prof = $sftpProfiles.find((p) => p.id === profileId);
+      if (prof) {
+        if ($settings.pinProtectionEnabled && !$isSftpUnlocked) {
+          activePane.set(paneId);
+          showSftpModal.set(true);
+        } else {
+          connectSftp(paneId, profileToSftpConfig(prof));
+          showToast(`Ansluten till ${prof.name} (${prof.host})`);
+        }
+      }
+      return;
+    }
+    navigatePane(paneId, val);
   }
 
   function handleSelectRow(index: number) {
@@ -316,11 +338,22 @@
           class="text-xs font-mono border rounded px-2 py-1 outline-none focus:border-blue-500
             {$settings.theme === 'light' ? 'bg-white text-slate-800 border-slate-300' : 'bg-slate-900 text-slate-200 border-slate-700'}"
         >
-          {#each drives as drive}
-            <option value={drive.path}>{drive.name}</option>
-          {/each}
+          <optgroup label="Diskar & Lokalt">
+            {#each drives as drive}
+              <option value={drive.path}>{drive.name}</option>
+            {/each}
+          </optgroup>
           {#if state.isSftp}
-            <option value={state.currentPath}>SFTP: {state.sftpConfig?.host}</option>
+            <optgroup label="Aktiv SFTP">
+              <option value={state.currentPath}>Aktiv SFTP: {state.sftpConfig?.username}@{state.sftpConfig?.host}</option>
+            </optgroup>
+          {/if}
+          {#if $sftpProfiles.length > 0}
+            <optgroup label="Växla SFTP-server">
+              {#each $sftpProfiles as prof}
+                <option value="sftp_profile_{prof.id}">⚡ {prof.name} ({prof.host})</option>
+              {/each}
+            </optgroup>
           {/if}
         </select>
 
@@ -346,8 +379,11 @@
         </button>
 
         <button
-          on:click={() => showSftpModal.set(true)}
-          title="Anslut SFTP"
+          on:click={() => {
+            activePane.set(paneId);
+            showSftpModal.set(true);
+          }}
+          title="SFTP Site Manager & Servervalv"
           class="p-1.5 rounded text-xs flex items-center gap-1 font-semibold transition-colors
             {$settings.theme === 'light'
               ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200'
