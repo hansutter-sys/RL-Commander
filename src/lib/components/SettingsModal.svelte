@@ -1,16 +1,132 @@
 <script lang="ts">
-  import { showSettingsModal } from "../stores/commander";
+  import { showSettingsModal, showToast } from "../stores/commander";
   import { settings } from "../stores/settings";
-  import { Settings, X, HardDrive, Eye, Trash2, Folder, RotateCcw, Check, Monitor } from "lucide-svelte";
+  import { hashPin, verifyPin } from "../crypto";
+  import { reEncryptVaultWithNewPin } from "../stores/sftpProfiles";
+  import {
+    Settings,
+    X,
+    HardDrive,
+    Eye,
+    Trash2,
+    Folder,
+    RotateCcw,
+    Check,
+    Monitor,
+    Moon,
+    Sun,
+    Lock,
+    Unlock,
+    ShieldCheck,
+    Key,
+  } from "lucide-svelte";
+
+  // PIN settings state
+  let pinAction: "none" | "enable" | "change" | "disable" = "none";
+  let currentPinInput = "";
+  let newPinInput = "";
+  let confirmPinInput = "";
+  let pinError = "";
 
   function handleReset() {
     if (confirm("Är du säker på att du vill återställa alla inställningar till standard?")) {
       settings.reset();
+      pinAction = "none";
+      pinError = "";
     }
   }
 
   function handleClose() {
     showSettingsModal.set(false);
+    pinAction = "none";
+    pinError = "";
+    currentPinInput = "";
+    newPinInput = "";
+    confirmPinInput = "";
+  }
+
+  async function handleEnablePin() {
+    pinError = "";
+    if (newPinInput.length < 4) {
+      pinError = "PIN-koden måste vara minst 4 tecken eller siffror.";
+      return;
+    }
+    if (newPinInput !== confirmPinInput) {
+      pinError = "PIN-koderna matchar inte.";
+      return;
+    }
+
+    try {
+      const pinHash = await hashPin(newPinInput);
+      await reEncryptVaultWithNewPin(newPinInput);
+      settings.update((s) => ({
+        ...s,
+        pinProtectionEnabled: true,
+        pinHash,
+      }));
+      pinAction = "none";
+      newPinInput = "";
+      confirmPinInput = "";
+      showToast("PIN-kod aktiverad för SFTP-inloggningar!");
+    } catch (e: any) {
+      pinError = `Fel vid kryptering: ${e?.toString()}`;
+    }
+  }
+
+  async function handleChangePin() {
+    pinError = "";
+    const isValidCurrent = await verifyPin(currentPinInput, $settings.pinHash);
+    if (!isValidCurrent) {
+      pinError = "Nuvarande PIN-kod är felaktig.";
+      return;
+    }
+    if (newPinInput.length < 4) {
+      pinError = "Nya PIN-koden måste vara minst 4 tecken eller siffror.";
+      return;
+    }
+    if (newPinInput !== confirmPinInput) {
+      pinError = "De nya PIN-koderna matchar inte.";
+      return;
+    }
+
+    try {
+      const pinHash = await hashPin(newPinInput);
+      await reEncryptVaultWithNewPin(newPinInput, currentPinInput);
+      settings.update((s) => ({
+        ...s,
+        pinHash,
+      }));
+      pinAction = "none";
+      currentPinInput = "";
+      newPinInput = "";
+      confirmPinInput = "";
+      showToast("PIN-koden har ändrats!");
+    } catch (e: any) {
+      pinError = `Fel vid ändring av PIN: ${e?.toString()}`;
+    }
+  }
+
+  async function handleDisablePin() {
+    pinError = "";
+    const isValidCurrent = await verifyPin(currentPinInput, $settings.pinHash);
+    if (!isValidCurrent) {
+      pinError = "Nuvarande PIN-kod är felaktig.";
+      return;
+    }
+
+    try {
+      await reEncryptVaultWithNewPin(null, currentPinInput);
+      settings.update((s) => ({
+        ...s,
+        pinProtectionEnabled: false,
+        pinHash: "",
+      }));
+      pinAction = "none";
+      currentPinInput = "";
+      showToast("PIN-kodsskydd inaktiverat.");
+    } catch (e: any) {
+      pinError = `Fel vid inaktivering: ${e?.toString()}`;
+    }
   }
 </script>
 
@@ -18,55 +134,344 @@
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg shadow-2xl p-5 text-slate-100 font-sans flex flex-col max-h-[90vh]">
+    <div
+      class="border rounded-xl w-full max-w-lg shadow-2xl p-5 font-sans flex flex-col max-h-[90vh] transition-colors
+        {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+    >
       <!-- Header -->
-      <div class="flex items-center justify-between pb-3 border-b border-slate-800 flex-shrink-0">
-        <div class="flex items-center gap-2 font-bold text-lg text-blue-400">
-          <Settings class="w-5 h-5 text-blue-400" />
+      <div
+        class="flex items-center justify-between pb-3 border-b flex-shrink-0
+          {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'}"
+      >
+        <div class="flex items-center gap-2 font-bold text-lg text-blue-500">
+          <Settings class="w-5 h-5 text-blue-500" />
           <span>Inställningar</span>
         </div>
-        <button on:click={handleClose} class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors">
+        <button
+          on:click={handleClose}
+          class="p-1 rounded transition-colors
+            {$settings.theme === 'light' ? 'text-slate-400 hover:text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:text-white hover:bg-slate-800'}"
+        >
           <X class="w-5 h-5" />
         </button>
       </div>
 
       <!-- Settings Content -->
       <div class="space-y-5 my-4 overflow-y-auto pr-1 flex-1 font-sans text-sm">
+        <!-- Theme & Appearance Section -->
+        <div class="space-y-3">
+          <h3
+            class="text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5
+              {$settings.theme === 'light' ? 'text-slate-600' : 'text-slate-400'}"
+          >
+            {#if $settings.theme === 'light'}
+              <Sun class="w-4 h-4 text-amber-500" />
+            {:else}
+              <Moon class="w-4 h-4 text-indigo-400" />
+            {/if}
+            Tema & Utseende
+          </h3>
+
+          <div
+            class="border rounded-lg p-3 grid grid-cols-2 gap-3
+              {$settings.theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/70 border-slate-800'}"
+          >
+            <!-- Dark Mode Option -->
+            <button
+              type="button"
+              on:click={() => settings.update((s) => ({ ...s, theme: "dark" }))}
+              class="flex items-center gap-3 p-3 rounded-lg border transition-all text-left
+                {$settings.theme === 'dark'
+                  ? 'bg-blue-600/20 border-blue-500 ring-2 ring-blue-500/50 text-white'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'}"
+            >
+              <div class="p-2 rounded-md bg-slate-800 text-indigo-300">
+                <Moon class="w-5 h-5" />
+              </div>
+              <div>
+                <div class="font-semibold text-xs text-slate-100">Mörkt läge</div>
+                <div class="text-[11px] text-slate-400">Klassisk mörk Commander-stil</div>
+              </div>
+            </button>
+
+            <!-- Light Mode Option -->
+            <button
+              type="button"
+              on:click={() => settings.update((s) => ({ ...s, theme: "light" }))}
+              class="flex items-center gap-3 p-3 rounded-lg border transition-all text-left
+                {$settings.theme === 'light'
+                  ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/50 text-slate-900'
+                  : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-600'}"
+            >
+              <div class="p-2 rounded-md bg-amber-100 text-amber-600">
+                <Sun class="w-5 h-5" />
+              </div>
+              <div>
+                <div class="font-semibold text-xs {$settings.theme === 'light' ? 'text-slate-900' : 'text-slate-200'}">Ljust läge</div>
+                <div class="text-[11px] {$settings.theme === 'light' ? 'text-slate-500' : 'text-slate-400'}">Ljus bakgrund & hög kontrast</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Security & SFTP PIN Protection Section -->
+        <div class="space-y-3">
+          <h3
+            class="text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5
+              {$settings.theme === 'light' ? 'text-slate-600' : 'text-slate-400'}"
+          >
+            <ShieldCheck class="w-4 h-4 text-purple-500" />
+            Säkerhet & PIN-kod för SFTP
+          </h3>
+
+          <div
+            class="border rounded-lg p-3 space-y-3 transition-colors
+              {$settings.theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/70 border-slate-800'}"
+          >
+            <div class="flex items-center justify-between">
+              <div class="space-y-0.5">
+                <div class="font-medium flex items-center gap-2 {$settings.theme === 'light' ? 'text-slate-800' : 'text-slate-200'}">
+                  <span>Skydda sparade SFTP-inloggningar med PIN</span>
+                  {#if $settings.pinProtectionEnabled}
+                    <span class="text-[10px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-1.5 py-0.2 rounded font-mono font-bold">
+                      Aktivt ✓
+                    </span>
+                  {/if}
+                </div>
+                <p class="text-xs {$settings.theme === 'light' ? 'text-slate-500' : 'text-slate-400'}">
+                  Kräver PIN-kod för att öppna eller ansluta till dina sparade SFTP-servrar
+                </p>
+              </div>
+
+              {#if !$settings.pinProtectionEnabled}
+                {#if pinAction !== "enable"}
+                  <button
+                    type="button"
+                    on:click={() => {
+                      pinAction = "enable";
+                      newPinInput = "";
+                      confirmPinInput = "";
+                      pinError = "";
+                    }}
+                    class="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-sm transition-all"
+                  >
+                    Aktivera PIN
+                  </button>
+                {/if}
+              {:else}
+                <div class="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    on:click={() => {
+                      pinAction = "change";
+                      currentPinInput = "";
+                      newPinInput = "";
+                      confirmPinInput = "";
+                      pinError = "";
+                    }}
+                    class="px-2.5 py-1 rounded border text-xs font-semibold transition-colors
+                      {$settings.theme === 'light' ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'}"
+                  >
+                    Ändra PIN
+                  </button>
+                  <button
+                    type="button"
+                    on:click={() => {
+                      pinAction = "disable";
+                      currentPinInput = "";
+                      pinError = "";
+                    }}
+                    class="px-2.5 py-1 rounded text-rose-500 hover:bg-rose-500/10 border border-rose-500/30 text-xs font-semibold transition-colors"
+                  >
+                    Stäng av
+                  </button>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Enable PIN Form -->
+            {#if pinAction === "enable"}
+              <div class="pt-3 border-t {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'} space-y-2.5">
+                <div class="text-xs font-semibold text-purple-500">Skapa ny PIN-kod (minst 4 siffror/tecken):</div>
+                <div class="grid grid-cols-2 gap-2">
+                  <input
+                    type="password"
+                    bind:value={newPinInput}
+                    placeholder="Ny PIN-kod"
+                    maxlength="12"
+                    class="border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                      {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                  />
+                  <input
+                    type="password"
+                    bind:value={confirmPinInput}
+                    placeholder="Bekräfta PIN-kod"
+                    maxlength="12"
+                    class="border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                      {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                  />
+                </div>
+                {#if pinError}
+                  <div class="text-rose-500 text-xs font-semibold">{pinError}</div>
+                {/if}
+                <div class="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    on:click={() => (pinAction = "none")}
+                    class="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Avbryt
+                  </button>
+                  <button
+                    type="button"
+                    on:click={handleEnablePin}
+                    class="px-3 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-sm"
+                  >
+                    Spara & Aktivera
+                  </button>
+                </div>
+              </div>
+            {/if}
+
+            <!-- Change PIN Form -->
+            {#if pinAction === "change"}
+              <div class="pt-3 border-t {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'} space-y-2.5">
+                <div class="text-xs font-semibold text-purple-500">Ändra PIN-kod:</div>
+                <div class="space-y-2">
+                  <input
+                    type="password"
+                    bind:value={currentPinInput}
+                    placeholder="Nuvarande PIN-kod"
+                    maxlength="12"
+                    class="w-full border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                      {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                  />
+                  <div class="grid grid-cols-2 gap-2">
+                    <input
+                      type="password"
+                      bind:value={newPinInput}
+                      placeholder="Ny PIN-kod"
+                      maxlength="12"
+                      class="border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                        {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                    />
+                    <input
+                      type="password"
+                      bind:value={confirmPinInput}
+                      placeholder="Bekräfta ny PIN-kod"
+                      maxlength="12"
+                      class="border rounded px-3 py-1.5 text-xs outline-none focus:border-purple-500
+                        {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                    />
+                  </div>
+                </div>
+                {#if pinError}
+                  <div class="text-rose-500 text-xs font-semibold">{pinError}</div>
+                {/if}
+                <div class="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    on:click={() => (pinAction = "none")}
+                    class="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Avbryt
+                  </button>
+                  <button
+                    type="button"
+                    on:click={handleChangePin}
+                    class="px-3 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-sm"
+                  >
+                    Spara ny PIN
+                  </button>
+                </div>
+              </div>
+            {/if}
+
+            <!-- Disable PIN Form -->
+            {#if pinAction === "disable"}
+              <div class="pt-3 border-t {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'} space-y-2.5">
+                <div class="text-xs font-semibold text-rose-500">Ange nuvarande PIN-kod för att inaktivera skyddet:</div>
+                <input
+                  type="password"
+                  bind:value={currentPinInput}
+                  placeholder="Nuvarande PIN-kod"
+                  maxlength="12"
+                  class="w-full border rounded px-3 py-1.5 text-xs outline-none focus:border-rose-500
+                    {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
+                />
+                {#if pinError}
+                  <div class="text-rose-500 text-xs font-semibold">{pinError}</div>
+                {/if}
+                <div class="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    on:click={() => (pinAction = "none")}
+                    class="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Avbryt
+                  </button>
+                  <button
+                    type="button"
+                    on:click={handleDisablePin}
+                    class="px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-sm"
+                  >
+                    Inaktivera PIN
+                  </button>
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+
         <!-- Layout & Display Section -->
         <div class="space-y-3">
-          <h3 class="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <h3
+            class="text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5
+              {$settings.theme === 'light' ? 'text-slate-600' : 'text-slate-400'}"
+          >
             <Monitor class="w-4 h-4 text-indigo-400" />
             Visning & Panelvy
           </h3>
 
-          <div class="bg-slate-950/70 border border-slate-800 rounded-lg p-3 space-y-3">
+          <div
+            class="border rounded-lg p-3 space-y-3
+              {$settings.theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/70 border-slate-800'}"
+          >
             <!-- Toggle showDiskSpace -->
             <label class="flex items-center justify-between cursor-pointer group">
               <div class="space-y-0.5">
-                <span class="font-medium text-slate-200 group-hover:text-blue-400 transition-colors">Visa diskutrymme</span>
-                <p class="text-xs text-slate-400">Visar disk-användning, ledigt utrymme och procentbar under enhetsväljaren</p>
+                <span class="font-medium group-hover:text-blue-500 transition-colors {$settings.theme === 'light' ? 'text-slate-800' : 'text-slate-200'}">
+                  Visa diskutrymme
+                </span>
+                <p class="text-xs {$settings.theme === 'light' ? 'text-slate-500' : 'text-slate-400'}">
+                  Visar disk-användning, ledigt utrymme och procentbar under enhetsväljaren
+                </p>
               </div>
               <input
                 type="checkbox"
                 checked={$settings.showDiskSpace}
                 on:change={(e) => settings.update((s) => ({ ...s, showDiskSpace: e.currentTarget.checked }))}
-                class="w-4 h-4 accent-blue-500 rounded border-slate-700 bg-slate-900 cursor-pointer"
+                class="w-4 h-4 accent-blue-500 rounded cursor-pointer"
               />
             </label>
 
-            <div class="h-px bg-slate-800/60"></div>
+            <div class="h-px {$settings.theme === 'light' ? 'bg-slate-200' : 'bg-slate-800/60'}"></div>
 
             <!-- Toggle showDriveButtons -->
             <label class="flex items-center justify-between cursor-pointer group">
               <div class="space-y-0.5">
-                <span class="font-medium text-slate-200 group-hover:text-blue-400 transition-colors">Visa snabbknappar för diskar</span>
-                <p class="text-xs text-slate-400">Visar rad med snabbknappar ([ / ], [ /home ], etc.) vid enhetsväljaren</p>
+                <span class="font-medium group-hover:text-blue-500 transition-colors {$settings.theme === 'light' ? 'text-slate-800' : 'text-slate-200'}">
+                  Visa snabbknappar för diskar
+                </span>
+                <p class="text-xs {$settings.theme === 'light' ? 'text-slate-500' : 'text-slate-400'}">
+                  Visar rad med snabbknappar ([ / ], [ /home ], etc.) vid enhetsväljaren
+                </p>
               </div>
               <input
                 type="checkbox"
                 checked={$settings.showDriveButtons}
                 on:change={(e) => settings.update((s) => ({ ...s, showDriveButtons: e.currentTarget.checked }))}
-                class="w-4 h-4 accent-blue-500 rounded border-slate-700 bg-slate-900 cursor-pointer"
+                class="w-4 h-4 accent-blue-500 rounded cursor-pointer"
               />
             </label>
           </div>
@@ -74,23 +479,33 @@
 
         <!-- File Management Section -->
         <div class="space-y-3">
-          <h3 class="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <h3
+            class="text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5
+              {$settings.theme === 'light' ? 'text-slate-600' : 'text-slate-400'}"
+          >
             <Trash2 class="w-4 h-4 text-rose-400" />
             Filhantering
           </h3>
 
-          <div class="bg-slate-950/70 border border-slate-800 rounded-lg p-3">
+          <div
+            class="border rounded-lg p-3
+              {$settings.theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/70 border-slate-800'}"
+          >
             <!-- Toggle confirmOnDelete -->
             <label class="flex items-center justify-between cursor-pointer group">
               <div class="space-y-0.5">
-                <span class="font-medium text-slate-200 group-hover:text-rose-400 transition-colors">Bekräfta vid radering (F8)</span>
-                <p class="text-xs text-slate-400">Visa bekräftelsedialogruta innan filer och mappar raderas</p>
+                <span class="font-medium group-hover:text-rose-500 transition-colors {$settings.theme === 'light' ? 'text-slate-800' : 'text-slate-200'}">
+                  Bekräfta vid radering (F8)
+                </span>
+                <p class="text-xs {$settings.theme === 'light' ? 'text-slate-500' : 'text-slate-400'}">
+                  Visa bekräftelsedialogruta innan filer och mappar raderas
+                </p>
               </div>
               <input
                 type="checkbox"
                 checked={$settings.confirmOnDelete}
                 on:change={(e) => settings.update((s) => ({ ...s, confirmOnDelete: e.currentTarget.checked }))}
-                class="w-4 h-4 accent-rose-500 rounded border-slate-700 bg-slate-900 cursor-pointer"
+                class="w-4 h-4 accent-rose-500 rounded cursor-pointer"
               />
             </label>
           </div>
@@ -98,28 +513,42 @@
 
         <!-- Default Paths Section -->
         <div class="space-y-3">
-          <h3 class="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Folder class="w-4 h-4 text-amber-400" />
+          <h3
+            class="text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5
+              {$settings.theme === 'light' ? 'text-slate-600' : 'text-slate-400'}"
+          >
+            <Folder class="w-4 h-4 text-amber-500" />
             Standard Sökvägar Vid Start
           </h3>
 
-          <div class="bg-slate-950/70 border border-slate-800 rounded-lg p-3 space-y-3 font-mono text-xs">
+          <div
+            class="border rounded-lg p-3 space-y-3 font-mono text-xs
+              {$settings.theme === 'light' ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/70 border-slate-800'}"
+          >
             <div>
-              <label class="block text-slate-400 mb-1 font-sans font-medium">Vänster Panel Standard-sökväg:</label>
+              <label for="default-left-path" class="block mb-1 font-sans font-medium {$settings.theme === 'light' ? 'text-slate-600' : 'text-slate-400'}">
+                Vänster Panel Standard-sökväg:
+              </label>
               <input
+                id="default-left-path"
                 type="text"
                 value={$settings.defaultLeftPath}
                 on:input={(e) => settings.update((s) => ({ ...s, defaultLeftPath: e.currentTarget.value }))}
-                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-slate-100 outline-none focus:border-blue-500"
+                class="w-full border rounded px-3 py-1.5 outline-none focus:border-blue-500
+                  {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
               />
             </div>
             <div>
-              <label class="block text-slate-400 mb-1 font-sans font-medium">Höger Panel Standard-sökväg:</label>
+              <label for="default-right-path" class="block mb-1 font-sans font-medium {$settings.theme === 'light' ? 'text-slate-600' : 'text-slate-400'}">
+                Höger Panel Standard-sökväg:
+              </label>
               <input
+                id="default-right-path"
                 type="text"
                 value={$settings.defaultRightPath}
                 on:input={(e) => settings.update((s) => ({ ...s, defaultRightPath: e.currentTarget.value }))}
-                class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-slate-100 outline-none focus:border-blue-500"
+                class="w-full border rounded px-3 py-1.5 outline-none focus:border-blue-500
+                  {$settings.theme === 'light' ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-900 border-slate-700 text-slate-100'}"
               />
             </div>
           </div>
@@ -127,11 +556,17 @@
       </div>
 
       <!-- Footer -->
-      <div class="flex items-center justify-between pt-3 border-t border-slate-800 flex-shrink-0">
+      <div
+        class="flex items-center justify-between pt-3 border-t flex-shrink-0
+          {$settings.theme === 'light' ? 'border-slate-200' : 'border-slate-800'}"
+      >
         <button
           type="button"
           on:click={handleReset}
-          class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs font-mono flex items-center gap-1.5 transition-colors"
+          class="px-3 py-1.5 rounded text-xs font-mono flex items-center gap-1.5 transition-colors
+            {$settings.theme === 'light'
+              ? 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+              : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200'}"
         >
           <RotateCcw class="w-3.5 h-3.5" />
           <span>Återställ standard</span>

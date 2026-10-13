@@ -21,6 +21,11 @@
     navigatePane,
     refreshPane,
     toggleSelection,
+    selectAll,
+    invertSelection,
+    clearSelection,
+    toggleBookmarkDropdown,
+    toastMessage,
     showViewerModal,
     showEditorModal,
     showSearchModal,
@@ -36,12 +41,41 @@
   import { settings } from "./lib/stores/settings";
   import { copyItemsAsync, deleteItems } from "./lib/tauri";
   import type { TransferProgressEvent } from "./lib/types";
-  import { Cpu, ArrowLeftRight, CheckCircle2, RefreshCw, Server, Search, Settings } from "lucide-svelte";
+  import {
+    Cpu,
+    ArrowLeftRight,
+    CheckCircle2,
+    RefreshCw,
+    Server,
+    Search,
+    Settings,
+    Sun,
+    Moon,
+  } from "lucide-svelte";
+
+  import { initSftpProfiles } from "./lib/stores/sftpProfiles";
 
   let isTransferring = false;
   let transferNotification: string | null = null;
 
+  // Splitter resizable width state
+  let mainContainerRef: HTMLElement;
+  let splitRatio = 50; // percentage for left pane
+  let isDraggingSplitter = false;
+
   onMount(() => {
+    initSftpProfiles();
+    // Load split ratio preference
+    if (typeof localStorage !== "undefined") {
+      const savedRatio = localStorage.getItem("rl_commander_split_ratio");
+      if (savedRatio) {
+        const parsed = parseFloat(savedRatio);
+        if (!isNaN(parsed) && parsed >= 15 && parsed <= 85) {
+          splitRatio = parsed;
+        }
+      }
+    }
+
     // Listen for Tauri transfer-progress events if in Tauri env
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
       import("@tauri-apps/api/event").then(({ listen }) => {
@@ -56,6 +90,49 @@
       });
     }
   });
+
+  // Theme synchronization with HTML root element
+  $: if (typeof document !== "undefined") {
+    if ($settings.theme === "light") {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
+    } else {
+      document.documentElement.classList.remove("light");
+      document.documentElement.classList.add("dark");
+    }
+  }
+
+  // Splitter resizing handlers
+  function handleStartResize(e: CustomEvent<MouseEvent>) {
+    isDraggingSplitter = true;
+    window.addEventListener("mousemove", handleSplitterMouseMove);
+    window.addEventListener("mouseup", handleSplitterMouseUp);
+  }
+
+  function handleSplitterMouseMove(e: MouseEvent) {
+    if (!isDraggingSplitter || !mainContainerRef) return;
+    const rect = mainContainerRef.getBoundingClientRect();
+    const newPercent = ((e.clientX - rect.left) / rect.width) * 100;
+    splitRatio = Math.max(15, Math.min(85, newPercent));
+  }
+
+  function handleSplitterMouseUp() {
+    if (isDraggingSplitter) {
+      isDraggingSplitter = false;
+      window.removeEventListener("mousemove", handleSplitterMouseMove);
+      window.removeEventListener("mouseup", handleSplitterMouseUp);
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("rl_commander_split_ratio", splitRatio.toFixed(1));
+      }
+    }
+  }
+
+  function handleResetResize() {
+    splitRatio = 50;
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("rl_commander_split_ratio", "50");
+    }
+  }
 
   function handleKeyDown(e: KeyboardEvent) {
     // Disable global hotkeys if any modal is open
@@ -82,6 +159,10 @@
       return;
     }
 
+    const currentPaneId = $activePane;
+    const currentStore = currentPaneId === "left" ? leftPane : rightPane;
+    const state = $activePaneState;
+
     // Alt+F7 Search
     if (e.altKey && e.key === "F7") {
       e.preventDefault();
@@ -89,9 +170,32 @@
       return;
     }
 
-    const currentPaneId = $activePane;
-    const currentStore = currentPaneId === "left" ? leftPane : rightPane;
-    const state = $activePaneState;
+    // Ctrl+A: Select all files in active pane
+    if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A")) {
+      e.preventDefault();
+      selectAll(currentPaneId);
+      return;
+    }
+
+    // Ctrl+D: Directory Bookmarks / Genvägar
+    if ((e.ctrlKey || e.metaKey) && (e.key === "d" || e.key === "D")) {
+      e.preventDefault();
+      toggleBookmarkDropdown(currentPaneId);
+      return;
+    }
+
+    // Total Commander '*': Invert selection
+    if (e.key === "*" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      invertSelection(currentPaneId);
+      return;
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      clearSelection(currentPaneId);
+      return;
+    }
 
     if (e.key === "Tab") {
       e.preventDefault();
@@ -284,77 +388,130 @@
 
 <svelte:window on:keydown={handleKeyDown} />
 
-<div class="h-screen w-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none font-sans">
+<div
+  class="h-screen w-screen flex flex-col overflow-hidden select-none font-sans transition-colors duration-150
+    {$settings.theme === 'light' ? 'bg-slate-100 text-slate-800' : 'bg-slate-950 text-slate-100'}"
+>
   <!-- Top Application Bar -->
-  <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shadow-md">
+  <header
+    class="px-4 py-2 flex items-center justify-between shadow-md border-b transition-colors
+      {$settings.theme === 'light' ? 'bg-white border-slate-300' : 'bg-slate-900/90 border-slate-800'}"
+  >
     <div class="flex items-center gap-3">
-      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 via-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+      <div
+        class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 via-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/20"
+      >
         <Cpu class="w-5 h-5 text-white" />
       </div>
       <div>
-        <h1 class="font-black text-base tracking-wider bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">
-          RL COMMANDER <span class="text-xs font-mono font-normal text-slate-400">v1.2</span>
+        <h1
+          class="font-black text-base tracking-wider bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 bg-clip-text text-transparent"
+        >
+          RL COMMANDER <span class="text-xs font-mono font-normal opacity-70">v1.2</span>
         </h1>
-        <p class="text-[10px] font-mono text-slate-400 -mt-0.5">High Performance Dual-Pane & SFTP Engine</p>
+        <p class="text-[10px] font-mono opacity-60 -mt-0.5">High Performance Dual-Pane & SFTP Engine</p>
       </div>
     </div>
 
     <!-- Active Pane Status Indicator -->
-    <div class="hidden sm:flex items-center gap-3 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-mono">
+    <div
+      class="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-lg border text-xs font-mono transition-colors
+        {$settings.theme === 'light' ? 'bg-slate-100 border-slate-300' : 'bg-slate-950 border-slate-800'}"
+    >
       <div class="flex items-center gap-1.5">
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span class="text-slate-400">Aktiv Pane:</span>
-        <span class="font-bold text-blue-400 uppercase">{$activePane}</span>
+        <span class="opacity-70">Aktiv:</span>
+        <span class="font-bold text-blue-500 uppercase">{$activePane}</span>
       </div>
-      <div class="h-3 w-px bg-slate-800"></div>
+      <div class="h-3 w-px {$settings.theme === 'light' ? 'bg-slate-300' : 'bg-slate-800'}"></div>
       <button
         on:click={toggleActivePane}
-        class="text-slate-400 hover:text-white flex items-center gap-1 transition-colors hover:bg-slate-900 px-1.5 py-0.5 rounded"
+        class="flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded
+          {$settings.theme === 'light' ? 'hover:bg-slate-200 text-slate-700' : 'hover:bg-slate-900 text-slate-400 hover:text-white'}"
       >
-        <ArrowLeftRight class="w-3.5 h-3.5 text-indigo-400" />
+        <ArrowLeftRight class="w-3.5 h-3.5 text-indigo-500" />
         <span>Växla (Tab)</span>
       </button>
     </div>
 
     <div class="flex items-center gap-2">
+      <!-- Search Button -->
       <button
         on:click={() => showSearchModal.set(true)}
-        class="bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-800/80 text-indigo-300 px-3 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+        class="px-2.5 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-2xs
+          {$settings.theme === 'light'
+            ? 'bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700'
+            : 'bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-800/80 text-indigo-300'}"
       >
-        <Search class="w-3.5 h-3.5 text-indigo-400" />
+        <Search class="w-3.5 h-3.5 text-indigo-500" />
         <span>Sök (Alt+F7)</span>
       </button>
+
+      <!-- SFTP Manager Button -->
       <button
         on:click={() => showSftpModal.set(true)}
-        class="bg-purple-950/60 hover:bg-purple-900 border border-purple-800/80 text-purple-300 px-3 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+        class="px-2.5 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-2xs
+          {$settings.theme === 'light'
+            ? 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700'
+            : 'bg-purple-950/60 hover:bg-purple-900 border border-purple-800/80 text-purple-300'}"
       >
-        <Server class="w-3.5 h-3.5 text-purple-400" />
-        <span>SFTP Manager</span>
+        <Server class="w-3.5 h-3.5 text-purple-500" />
+        <span>SFTP</span>
       </button>
+
+      <!-- Quick Theme Switch Button -->
+      <button
+        on:click={() => settings.update((s) => ({ ...s, theme: s.theme === "light" ? "dark" : "light" }))}
+        class="border px-2.5 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-2xs
+          {$settings.theme === 'light'
+            ? 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800'
+            : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'}"
+        title="Växla mellan mörkt och ljust läge"
+      >
+        {#if $settings.theme === "light"}
+          <Sun class="w-3.5 h-3.5 text-amber-600" />
+          <span class="hidden md:inline">Ljust</span>
+        {:else}
+          <Moon class="w-3.5 h-3.5 text-indigo-400" />
+          <span class="hidden md:inline">Mörkt</span>
+        {/if}
+      </button>
+
+      <!-- Settings Button -->
       <button
         on:click={() => showSettingsModal.set(true)}
-        class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-2.5 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+        class="border px-2.5 py-1.5 rounded-md text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-2xs
+          {$settings.theme === 'light'
+            ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+            : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'}"
         title="Inställningar"
       >
-        <Settings class="w-3.5 h-3.5 text-slate-300" />
+        <Settings class="w-3.5 h-3.5 {$settings.theme === 'light' ? 'text-slate-600' : 'text-slate-300'}" />
         <span class="hidden sm:inline">Inställningar</span>
       </button>
+
+      <!-- Refresh Panes Button -->
       <button
         on:click={() => {
           refreshPane("left");
           refreshPane("right");
         }}
-        class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-2.5 py-1.5 rounded-md text-xs font-mono flex items-center gap-1 transition-all"
+        class="border px-2.5 py-1.5 rounded-md text-xs font-mono flex items-center gap-1 transition-all
+          {$settings.theme === 'light'
+            ? 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+            : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'}"
         title="Uppdatera båda paneler"
       >
-        <RefreshCw class="w-3.5 h-3.5 text-slate-400" />
+        <RefreshCw class="w-3.5 h-3.5 opacity-70" />
       </button>
     </div>
   </header>
 
   <!-- Notification Banner -->
   {#if transferNotification}
-    <div class="bg-blue-950/90 border-b border-blue-800/80 px-4 py-1.5 flex items-center justify-between text-xs font-mono text-blue-200 animate-fadeIn">
+    <div
+      class="bg-blue-950/90 border-b border-blue-800/80 px-4 py-1.5 flex items-center justify-between text-xs font-mono text-blue-200 animate-fadeIn"
+    >
       <div class="flex items-center gap-2">
         {#if isTransferring}
           <RefreshCw class="w-3.5 h-3.5 animate-spin text-blue-400" />
@@ -371,11 +528,35 @@
     </div>
   {/if}
 
-  <!-- Main Dual-Pane Viewport -->
-  <main class="flex-1 flex p-2 gap-2 overflow-hidden bg-slate-950">
-    <Pane state={$leftPane} paneId="left" />
-    <Splitter />
-    <Pane state={$rightPane} paneId="right" />
+  <!-- Toast Notification Message Popup -->
+  {#if $toastMessage}
+    <div
+      class="fixed bottom-14 right-6 z-50 bg-slate-900 border border-slate-700 text-slate-100 px-4 py-2.5 rounded-lg shadow-2xl flex items-center gap-2 font-mono text-xs animate-bounce"
+    >
+      <CheckCircle2 class="w-4 h-4 text-emerald-400 flex-shrink-0" />
+      <span>{$toastMessage}</span>
+    </div>
+  {/if}
+
+  <!-- Main Dual-Pane Viewport with Draggable Splitter -->
+  <main
+    bind:this={mainContainerRef}
+    class="flex-1 flex p-2 gap-1 overflow-hidden transition-colors
+      {$settings.theme === 'light' ? 'bg-slate-100' : 'bg-slate-950'}"
+  >
+    <div style="width: {splitRatio}%; flex: none; height: 100%;" class="min-w-0">
+      <Pane state={$leftPane} paneId="left" />
+    </div>
+
+    <Splitter
+      isDragging={isDraggingSplitter}
+      on:startResize={handleStartResize}
+      on:resetResize={handleResetResize}
+    />
+
+    <div style="width: calc({100 - splitRatio}% - 0.5rem); flex: 1 1 0%; height: 100%;" class="min-w-0">
+      <Pane state={$rightPane} paneId="right" />
+    </div>
   </main>
 
   <!-- Bottom Function Key Toolbar -->

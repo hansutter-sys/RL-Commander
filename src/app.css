@@ -7,6 +7,11 @@
     color-scheme: dark;
     --font-mono: 'JetBrains Mono', monospace;
   }
+
+  html.light,
+  :root.light {
+    color-scheme: light;
+  }
   
   body {
     user-select: none;
@@ -20,17 +25,32 @@
   height: 8px;
 }
 
+html.dark ::-webkit-scrollbar-track,
 ::-webkit-scrollbar-track {
   background: #0f172a;
 }
 
+html.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+html.dark ::-webkit-scrollbar-thumb,
 ::-webkit-scrollbar-thumb {
   background: #334155;
   border-radius: 4px;
 }
 
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
+}
+
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .mono-font {

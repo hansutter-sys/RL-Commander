@@ -25,6 +25,17 @@ export interface SftpConfig {
   private_key_path?: string;
 }
 
+export interface SftpProfile {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  private_key_path?: string;
+  created_at: number;
+}
+
 export interface TransferProgressEvent {
   task_id: string;
   src_path: string;

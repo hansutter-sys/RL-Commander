@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { FileItem, PaneId } from "../types";
-  import { Archive, FolderArchive, Eye, Edit3, Copy, Move, Trash2 } from "lucide-svelte";
+  import { Archive, FolderArchive, Eye, Edit3, Copy, Move, Trash2, Bookmark as BookmarkIcon } from "lucide-svelte";
+  import { addBookmark } from "../stores/commander";
 
   export let x: number = 0;
   export let y: number = 0;
@@ -77,6 +78,19 @@
           <div class="flex items-center gap-2">
             <FolderArchive class="w-4 h-4 text-amber-400 group-hover:text-white" />
             <span class="text-amber-300 group-hover:text-white font-semibold">Packa upp ZIP här</span>
+          </div>
+        </button>
+      {/if}
+
+      <!-- Bookmark option (Only if directory) -->
+      {#if item.is_dir}
+        <button
+          on:click={() => { if (item) { addBookmark(item.path, item.name); } onClose(); }}
+          class="w-full px-3 py-1.5 text-left hover:bg-blue-600 hover:text-white flex items-center justify-between transition-colors group"
+        >
+          <div class="flex items-center gap-2">
+            <BookmarkIcon class="w-4 h-4 text-amber-400 group-hover:text-white" />
+            <span>Lägg till som genväg</span>
           </div>
         </button>
       {/if}
